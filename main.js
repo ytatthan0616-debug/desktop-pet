@@ -40,13 +40,13 @@ let lastSaveTime = 0;
 let lastCommandedBounds = null;
 let prevCpuCores = os.cpus();
 
-function getGroundY(winH) {
-  const work = screen.getPrimaryDisplay().workArea;
+function getGroundY(display, winH) {
+  const work = display.workArea;
   return work.y + work.height - winH - WINDOW_MARGIN_FROM_EDGE;
 }
 
-function getXBounds(winW) {
-  const work = screen.getPrimaryDisplay().workArea;
+function getXBounds(display, winW) {
+  const work = display.workArea;
   return { minX: work.x, maxX: work.x + work.width - winW };
 }
 
@@ -267,8 +267,15 @@ function wanderTick() {
   const now = Date.now();
 
   const [winW, winH] = mainWindow.getSize();
-  const { minX, maxX } = getXBounds(winW);
-  const groundY = getGroundY(winH);
+  // ドラッグ中に別のモニターへ移動している場合があるため、現在位置に
+  // 最も近いディスプレイを基準に境界を計算する(常にプライマリだと、
+  // 手を離した瞬間に落下処理でプライマリ側へクランプされ戻ってしまう)。
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(wander.x + winW / 2),
+    y: Math.round(wander.y + winH / 2),
+  });
+  const { minX, maxX } = getXBounds(display, winW);
+  const groundY = getGroundY(display, winH);
 
   // ドラッグ中: OSに位置を委ね、動きが止まったら「手を離した」とみなして落下開始
   if (wander.mode === 'dragging') {
