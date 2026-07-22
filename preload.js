@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   onWalkState: (callback) => {
     ipcRenderer.on('walk-state', (_event, data) => callback(data));
   },
+  onLanded: (callback) => {
+    ipcRenderer.on('landed', () => callback());
+  },
   requestQuit: () => ipcRenderer.send('pet:quit'),
   requestReset: () => ipcRenderer.send('pet:reset'),
   requestContextMenu: () => ipcRenderer.send('pet:context-menu'),

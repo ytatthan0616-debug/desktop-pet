@@ -52,8 +52,23 @@ window.petAPI.onSpeech((data) => {
 
 window.petAPI.onWalkState((data) => {
   document.body.classList.toggle('walking', !!data.walking);
+  document.body.classList.toggle('falling', !!data.falling);
   document.body.classList.toggle('facing-left', data.facing === 'left');
   document.body.classList.toggle('facing-right', data.facing === 'right');
+
+  const height = Math.max(0, Math.min(200, data.heightAboveGround || 0));
+  const shadowScale = Math.max(0.15, 1 - height / 260);
+  const shadowOpacity = Math.max(0.04, 0.32 - height / 700);
+  document.body.style.setProperty('--shadow-scale', shadowScale.toFixed(3));
+  document.body.style.setProperty('--shadow-opacity', shadowOpacity.toFixed(3));
+});
+
+window.petAPI.onLanded(() => {
+  document.body.classList.remove('landed');
+  // 強制リフローしてアニメーションを再始動させる
+  void document.body.offsetWidth;
+  document.body.classList.add('landed');
+  setTimeout(() => document.body.classList.remove('landed'), 320);
 });
 
 document.addEventListener('contextmenu', (event) => {

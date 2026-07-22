@@ -20,7 +20,8 @@ const SAVE_INTERVAL_MS = 30000;
 
 // --- 歩き回り(wander)関連定数 ---
 const WANDER_TICK_MS = 50;
-const PAUSE_AFTER_DRAG_MS = 1500;
+const DRAG_END_DEBOUNCE_MS = 220; // 最後の move イベントからこれだけ経ったら「手を離した」とみなす
+const GRAVITY_PX_PER_S2 = 2200; // 落下の加速度
 
 let mainWindow = null;
 let state = petState.loadState(STATE_FILE);
@@ -31,12 +32,16 @@ let lastCommandedBounds = null;
 
 const wander = {
   x: 0,
+  y: 0,
+  vy: 0, // 落下時の垂直速度
   direction: 1, // 1: 右へ, -1: 左へ
-  mode: 'idle', // 'idle' | 'walk'
+  mode: 'idle', // 'idle' | 'walk' | 'dragging' | 'falling'
   modeUntil: 0,
-  suppressUntil: 0,
+  lastMoveEventAt: 0,
   lastSentFacing: null,
   lastSentWalking: null,
+  lastSentFalling: null,
+  lastSentHeight: 0,
 };
 
 function windowSizeForCompanions(companionCount) {
@@ -75,8 +80,9 @@ function createWindow() {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  const [initialX] = mainWindow.getPosition();
+  const [initialX, initialY] = mainWindow.getPosition();
   wander.x = initialX;
+  wander.y = initialY;
 
   // Windows/Linux では 'move' が移動中連続で発火する。
   // 自分で setBounds した直後の座標と一致しなければユーザーによるドラッグとみなす。
@@ -87,9 +93,10 @@ function createWindow() {
       lastCommandedBounds && Math.abs(x - lastCommandedBounds.x) <= 1 && Math.abs(y - lastCommandedBounds.y) <= 1;
     if (!matchesCommand) {
       wander.x = x;
-      wander.mode = 'idle';
-      wander.modeUntil = Date.now() + PAUSE_AFTER_DRAG_MS;
-      wander.suppressUntil = Date.now() + PAUSE_AFTER_DRAG_MS;
+      wander.y = y;
+      wander.vy = 0;
+      wander.mode = 'dragging';
+      wander.lastMoveEventAt = Date.now();
     }
   });
 }
@@ -108,6 +115,7 @@ function resizeWindowForCompanions() {
   const newX = curX - (width - curW);
   const newY = curY - (height - curH);
   wander.x = newX;
+  wander.y = newY;
   moveWindowTo(newX, newY, width, height);
 }
 
@@ -121,14 +129,28 @@ function sendSpeech(text) {
   mainWindow.webContents.send('speech', { text });
 }
 
-function sendWalkState(force) {
+function sendWalkState(force, heightAboveGround = 0) {
   if (!mainWindow) return;
   const facing = wander.direction >= 0 ? 'right' : 'left';
   const walking = config.wander && wander.mode === 'walk';
-  if (!force && facing === wander.lastSentFacing && walking === wander.lastSentWalking) return;
+  const falling = wander.mode === 'falling';
+  const height = Math.round(heightAboveGround);
+  const changed =
+    facing !== wander.lastSentFacing ||
+    walking !== wander.lastSentWalking ||
+    falling !== wander.lastSentFalling ||
+    Math.abs(height - wander.lastSentHeight) >= 2;
+  if (!force && !changed) return;
   wander.lastSentFacing = facing;
   wander.lastSentWalking = walking;
-  mainWindow.webContents.send('walk-state', { facing, walking });
+  wander.lastSentFalling = falling;
+  wander.lastSentHeight = height;
+  mainWindow.webContents.send('walk-state', { facing, walking, falling, heightAboveGround: height });
+}
+
+function sendLanded() {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('landed');
 }
 
 function randRange([min, max]) {
@@ -147,16 +169,48 @@ function pickNextWanderMode(now) {
 }
 
 function wanderTick() {
-  if (!mainWindow || !config.wander) return;
+  if (!mainWindow) return;
   const now = Date.now();
-  if (now < wander.suppressUntil) return;
-  if (now >= wander.modeUntil) pickNextWanderMode(now);
 
   const [winW, winH] = mainWindow.getSize();
   const { x: workX, y: workY, width: workW, height: workH } = screen.getPrimaryDisplay().workArea;
   const minX = workX;
   const maxX = workX + workW - winW;
   const groundY = workY + workH - winH - WINDOW_MARGIN_FROM_EDGE;
+
+  // ドラッグ中: OSに位置を委ね、動きが止まったら「手を離した」とみなして落下開始
+  if (wander.mode === 'dragging') {
+    if (now - wander.lastMoveEventAt > DRAG_END_DEBOUNCE_MS) {
+      wander.mode = 'falling';
+      wander.vy = 0;
+    }
+    sendWalkState(false, Math.max(0, groundY - wander.y));
+    return;
+  }
+
+  // 落下中: 重力で加速しながら地面まで降りる
+  if (wander.mode === 'falling') {
+    wander.vy += GRAVITY_PX_PER_S2 * (WANDER_TICK_MS / 1000);
+    wander.y += wander.vy * (WANDER_TICK_MS / 1000);
+    wander.x = Math.max(minX, Math.min(maxX, wander.x));
+    if (wander.y >= groundY) {
+      wander.y = groundY;
+      wander.vy = 0;
+      wander.mode = 'idle';
+      wander.modeUntil = now + randRange(config.idleDurationMs);
+      moveWindowTo(wander.x, wander.y, winW, winH);
+      sendWalkState(false, 0);
+      sendLanded();
+      return;
+    }
+    moveWindowTo(wander.x, wander.y, winW, winH);
+    sendWalkState(false, groundY - wander.y);
+    return;
+  }
+
+  // 通常の歩き回り(configで無効化されている場合は静止したまま)
+  if (!config.wander) return;
+  if (now >= wander.modeUntil) pickNextWanderMode(now);
 
   if (wander.mode === 'walk') {
     const dx = ((config.wanderSpeedPxPerSec * WANDER_TICK_MS) / 1000) * wander.direction;
@@ -170,9 +224,10 @@ function wanderTick() {
     }
   }
   wander.x = Math.max(minX, Math.min(maxX, wander.x));
+  wander.y = groundY;
 
-  moveWindowTo(wander.x, groundY, winW, winH);
-  sendWalkState(false);
+  moveWindowTo(wander.x, wander.y, winW, winH);
+  sendWalkState(false, 0);
 }
 
 function toggleWander() {
