@@ -64,7 +64,8 @@
     "publish": {
       "provider": "github",
       "owner": "ytatthan0616-debug",
-      "repo": "desktop-pet"
+      "repo": "desktop-pet",
+      "releaseType": "release"
     }
   }
 }
