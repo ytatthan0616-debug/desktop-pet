@@ -1,0 +1,6 @@
+{
+  "wander": true,
+  "wanderSpeedPxPerSec": 55,
+  "walkDurationMs": [2000, 6000],
+  "idleDurationMs": [1200, 4000]
+}
