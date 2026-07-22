@@ -3,8 +3,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const { app } = require('electron');
 
-const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
+// パッケージ化されたアプリでは __dirname が読み取り専用の asar 内を指すため、
+// その場合は resources ディレクトリ(書き込み可能)側の config.json を使う。
+const CONFIG_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, 'config.json')
+  : path.join(__dirname, '..', 'config.json');
 
 const DEFAULT_CONFIG = {
   wander: true, // true: 画面内を歩き回る / false: その場に留まる

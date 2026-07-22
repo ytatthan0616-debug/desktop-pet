@@ -3,16 +3,68 @@
   "version": "0.1.0",
   "description": "透明・常時最前面のデスクトップ常駐ペットアプリ",
   "main": "main.js",
+  "author": "ytatthan0616-debug",
   "private": true,
   "license": "MIT",
-  "keywords": ["electron", "desktop-pet", "desktop-mascot"],
+  "keywords": [
+    "electron",
+    "desktop-pet",
+    "desktop-mascot"
+  ],
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^31.0.2"
+    "electron": "^31.0.2",
+    "electron-builder": "^24.13.3"
   },
   "dependencies": {
     "active-win": "^8.2.1"
+  },
+  "build": {
+    "appId": "com.ytatthan0616.desktop-pet",
+    "productName": "Desktop Pet",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "ytatthan0616-debug",
+      "repo": "desktop-pet"
+    }
   }
 }

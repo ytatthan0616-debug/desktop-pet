@@ -19,22 +19,29 @@
 - **CPU/メモリ使用率で表情が変化**: PCの負荷が上がると目つきが変わります(口や眉は付けず、目の形だけで表現)。
 - **状態の永続化**: 累計作業時間・色などはアプリを再起動しても引き継がれます。
 
-## 必要環境
+## ダウンロード
+
+Node.jsのインストールやコマンド操作なしで使いたい場合は、[Releases](https://github.com/ytatthan0616-debug/desktop-pet/releases) ページから、お使いのOS用のインストーラーをダウンロードしてください。
+
+| OS | ファイル |
+| --- | --- |
+| Windows | `Desktop Pet Setup x.x.x.exe`（実行してインストーラーの案内に従うだけ） |
+| macOS | `Desktop Pet-x.x.x.dmg`（開いてApplicationsフォルダにドラッグ） |
+| Linux | `Desktop Pet-x.x.x.AppImage`（実行権限を付けて起動: `chmod +x` の後にダブルクリックまたは実行） |
+
+インストール後はアプリ一覧（Windowsならスタートメニュー）から「Desktop Pet」を起動できます。
+
+> Windows/macOSともに署名なしビルドのため、初回起動時に「発行元を確認できません」等の警告が出ることがあります。Windowsは「詳細情報」→「実行」、macOSは右クリック→「開く」で起動できます。
+
+## 開発者向け: ソースから実行
 
 - [Node.js](https://nodejs.org/) 18以降
 - npm
 
-## インストール
-
 ```bash
-git clone <このリポジトリのURL>
+git clone https://github.com/ytatthan0616-debug/desktop-pet.git
 cd desktop-pet
 npm install
-```
-
-## 起動
-
-```bash
 npm start
 ```
 
@@ -46,6 +53,7 @@ npm start
 ## 設定 (`config.json`)
 
 プロジェクト直下の `config.json` を編集すると、保存と同時に（再起動なしで）設定が反映されます。
+（インストーラー版の場合は、インストール先の `resources/config.json` が対象です。Windowsの既定インストール先は `%LOCALAPPDATA%\Programs\Desktop Pet\resources\config.json` です。）
 
 ```json
 {
@@ -98,11 +106,33 @@ desktop-pet/
     └── renderer.js
 ```
 
+## インストーラーのビルド
+
+[electron-builder](https://www.electron.build/) を使ってインストーラーを生成できます。
+
+```bash
+npm run dist:win    # Windows: NSISインストーラー(.exe)
+npm run dist:mac    # macOS: .dmg（macOS上でのみ実行可能）
+npm run dist:linux  # Linux: AppImage
+```
+
+生成物は `dist/` に出力されます（Gitには含まれません）。
+
+### リリースの自動公開
+
+`v` から始まるタグ（例: `v0.2.0`）をpushすると、GitHub Actions（`.github/workflows/release.yml`）がWindows/macOS/Linuxの3プラットフォームでビルドし、自動的に [Releases](https://github.com/ytatthan0616-debug/desktop-pet/releases) にインストーラーを公開します。
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
 ## 既知の制限
 
 - `active-win` によるアクティブウィンドウ検知は、macOSでは初回にアクセシビリティ権限の許可が必要な場合があります。
 - 現状は単一ディスプレイ（プライマリディスプレイ）を前提にしています。
 - キャラの見た目は白い四角+黒い目のみで、画像アセットは使用していません。
+- 配布用インストーラーはコード署名をしていないため、初回起動時にOSの警告が表示されます（[ダウンロード](#ダウンロード)参照）。
 
 ## ライセンス
 
