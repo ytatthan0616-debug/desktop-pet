@@ -9,11 +9,15 @@ function createPetElement(isCompanion) {
   const pet = document.createElement('div');
   pet.className = isCompanion ? 'pet companion' : 'pet main';
 
+  const sprite = document.createElement('div');
+  sprite.className = 'pixel-sprite';
+
   const left = document.createElement('div');
   left.className = 'eye left';
   const right = document.createElement('div');
   right.className = 'eye right';
 
+  pet.appendChild(sprite);
   pet.appendChild(left);
   pet.appendChild(right);
   return pet;
@@ -45,6 +49,7 @@ window.petAPI.onState((data) => {
   const percent = Math.min(100, Math.round(data.ratio * 100));
   expFillEl.style.width = `${percent}%`;
   document.body.dataset.color = data.color || 'white';
+  document.body.dataset.skin = data.skin || 'square';
 });
 
 window.petAPI.onSpeech((data) => {

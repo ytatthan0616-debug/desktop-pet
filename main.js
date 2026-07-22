@@ -412,6 +412,19 @@ function buildContextMenu() {
       })),
     },
     {
+      label: '見た目を変える',
+      submenu: petState.SKINS.map((s) => ({
+        label: s.label,
+        type: 'radio',
+        checked: state.skin === s.key,
+        click: () => {
+          petState.setSkin(state, s.key);
+          petState.saveState(STATE_FILE, state);
+          sendState();
+        },
+      })),
+    },
+    {
       label: 'データをリセット',
       click: () => {
         state = petState.defaultState();

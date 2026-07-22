@@ -25,6 +25,16 @@ const COLORS = [
 const DEFAULT_COLOR = 'white';
 const COLOR_KEYS = COLORS.map((c) => c.key);
 
+// 見た目(スキン)。ドット絵の犬・猫・少女もすべて無料で選択可能。
+const SKINS = [
+  { key: 'square', label: '四角(デフォルト)' },
+  { key: 'dog', label: '犬(ドット絵)' },
+  { key: 'cat', label: '猫(ドット絵)' },
+  { key: 'girl', label: '少女(ドット絵)' },
+];
+const DEFAULT_SKIN = 'square';
+const SKIN_KEYS = SKINS.map((s) => s.key);
+
 function computeLevel(totalSeconds) {
   return Math.floor(totalSeconds / SECONDS_PER_LEVEL) + 1;
 }
@@ -39,6 +49,7 @@ function defaultState() {
     level: 1,
     companions: 0,
     color: DEFAULT_COLOR,
+    skin: DEFAULT_SKIN,
   };
 }
 
@@ -53,6 +64,7 @@ function loadState(filePath) {
       level,
       companions: computeCompanions(level),
       color: COLOR_KEYS.includes(parsed.color) ? parsed.color : DEFAULT_COLOR,
+      skin: SKIN_KEYS.includes(parsed.skin) ? parsed.skin : DEFAULT_SKIN,
     };
   } catch (err) {
     return defaultState();
@@ -62,6 +74,12 @@ function loadState(filePath) {
 function setColor(state, colorKey) {
   if (!COLOR_KEYS.includes(colorKey)) return state;
   state.color = colorKey;
+  return state;
+}
+
+function setSkin(state, skinKey) {
+  if (!SKIN_KEYS.includes(skinKey)) return state;
+  state.skin = skinKey;
   return state;
 }
 
@@ -95,6 +113,7 @@ function getProgress(state) {
     level: state.level,
     companions: state.companions,
     color: state.color,
+    skin: state.skin,
     secondsIntoLevel,
     secondsForLevel: SECONDS_PER_LEVEL,
     ratio: secondsIntoLevel / SECONDS_PER_LEVEL,
@@ -107,6 +126,8 @@ module.exports = {
   MAX_COMPANIONS,
   COLORS,
   DEFAULT_COLOR,
+  SKINS,
+  DEFAULT_SKIN,
   computeLevel,
   computeCompanions,
   defaultState,
@@ -114,5 +135,6 @@ module.exports = {
   saveState,
   addActiveSeconds,
   setColor,
+  setSkin,
   getProgress,
 };
