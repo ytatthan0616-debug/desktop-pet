@@ -64,6 +64,10 @@ window.petAPI.onWalkState((data) => {
   document.body.style.setProperty('--shadow-opacity', shadowOpacity.toFixed(3));
 });
 
+window.petAPI.onSystemLoad((data) => {
+  document.body.dataset.expression = data.expression || 'calm';
+});
+
 window.petAPI.onLanded(() => {
   document.body.classList.remove('landed');
   // 強制リフローしてアニメーションを再始動させる

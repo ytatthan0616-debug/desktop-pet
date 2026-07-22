@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   onLanded: (callback) => {
     ipcRenderer.on('landed', () => callback());
   },
+  onSystemLoad: (callback) => {
+    ipcRenderer.on('system-load', (_event, data) => callback(data));
+  },
   requestQuit: () => ipcRenderer.send('pet:quit'),
   requestReset: () => ipcRenderer.send('pet:reset'),
   requestContextMenu: () => ipcRenderer.send('pet:context-menu'),

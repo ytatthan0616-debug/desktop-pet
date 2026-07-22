@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, Menu, screen, powerMonitor } = require('electron');
+const os = require('os');
 const path = require('path');
 const petState = require('./src/petState');
 const speech = require('./src/speech');
@@ -17,6 +18,11 @@ const TICK_INTERVAL_MS = 5000; // メインループの間隔
 const TICK_SECONDS = TICK_INTERVAL_MS / 1000;
 const IDLE_THRESHOLD_SECONDS = 90; // これ以上操作が無ければ「作業中」とみなさない
 const SAVE_INTERVAL_MS = 30000;
+const CHATTER_MIN_INTERVAL_MS = 45000; // アクティブウィンドウ検知によるセリフの最短間隔
+
+// --- 負荷(CPU/メモリ)による表情変化のしきい値(%) ---
+const LOAD_BUSY_THRESHOLD = 50;
+const LOAD_STRESSED_THRESHOLD = 80;
 
 // --- 歩き回り(wander)関連定数 ---
 const WANDER_TICK_MS = 50;
@@ -27,8 +33,10 @@ let mainWindow = null;
 let state = petState.loadState(STATE_FILE);
 let config = configStore.loadConfig();
 let lastActiveWindowKey = null;
+let lastChatterAt = 0;
 let lastSaveTime = 0;
 let lastCommandedBounds = null;
+let prevCpuCores = os.cpus();
 
 function getGroundY(winH) {
   const work = screen.getPrimaryDisplay().workArea;
@@ -174,6 +182,49 @@ function sendLanded() {
   mainWindow.webContents.send('landed');
 }
 
+function cpuTimesTotal(cores) {
+  let idle = 0;
+  let total = 0;
+  for (const core of cores) {
+    idle += core.times.idle;
+    total += core.times.user + core.times.nice + core.times.sys + core.times.idle + core.times.irq;
+  }
+  return { idle, total };
+}
+
+// 前回サンプルとの差分から CPU 使用率(%)を算出する
+function sampleCpuPercent() {
+  const cores = os.cpus();
+  const prev = cpuTimesTotal(prevCpuCores);
+  const cur = cpuTimesTotal(cores);
+  prevCpuCores = cores;
+
+  const idleDelta = cur.idle - prev.idle;
+  const totalDelta = cur.total - prev.total;
+  if (totalDelta <= 0) return 0;
+  return Math.max(0, Math.min(100, (1 - idleDelta / totalDelta) * 100));
+}
+
+function sampleMemoryPercent() {
+  const total = os.totalmem();
+  const free = os.freemem();
+  if (total <= 0) return 0;
+  return ((total - free) / total) * 100;
+}
+
+function sendSystemLoad() {
+  if (!mainWindow) return;
+  const cpu = sampleCpuPercent();
+  const mem = sampleMemoryPercent();
+  const combined = Math.max(cpu, mem);
+
+  let expression = 'calm';
+  if (combined >= LOAD_STRESSED_THRESHOLD) expression = 'stressed';
+  else if (combined >= LOAD_BUSY_THRESHOLD) expression = 'busy';
+
+  mainWindow.webContents.send('system-load', { cpu: Math.round(cpu), mem: Math.round(mem), expression });
+}
+
 function randRange([min, max]) {
   return min + Math.random() * (max - min);
 }
@@ -276,7 +327,11 @@ async function checkActiveWindow() {
     const key = `${owner}::${title}`;
     if (key !== lastActiveWindowKey) {
       lastActiveWindowKey = key;
-      sendSpeech(speech.speechForWindow(owner, title));
+      const now = Date.now();
+      if (now - lastChatterAt >= CHATTER_MIN_INTERVAL_MS) {
+        lastChatterAt = now;
+        sendSpeech(speech.speechForWindow(owner, title));
+      }
     }
   } catch (err) {
     // active-win はプラットフォームによっては権限が必要な場合がある。失敗しても致命的ではない。
@@ -285,6 +340,8 @@ async function checkActiveWindow() {
 }
 
 function tick() {
+  sendSystemLoad();
+
   const idleSeconds = powerMonitor.getSystemIdleTime();
 
   if (idleSeconds < IDLE_THRESHOLD_SECONDS) {
