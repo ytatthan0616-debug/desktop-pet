@@ -44,6 +44,7 @@ window.petAPI.onState((data) => {
   renderPets(data.companions);
   const percent = Math.min(100, Math.round(data.ratio * 100));
   expFillEl.style.width = `${percent}%`;
+  document.body.dataset.color = data.color || 'white';
 });
 
 window.petAPI.onSpeech((data) => {

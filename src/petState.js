@@ -10,6 +10,21 @@ const COMPANION_EVERY_LEVELS = 3;
 // 子分の最大数(ウィンドウが際限なく巨大化しないための上限)
 const MAX_COMPANIONS = 8;
 
+// 見た目の色。すべて無料で選択可能。
+const COLORS = [
+  { key: 'white', label: '白(デフォルト)' },
+  { key: 'black', label: '黒' },
+  { key: 'red', label: '赤' },
+  { key: 'blue', label: '青' },
+  { key: 'green', label: '緑' },
+  { key: 'yellow', label: '黄' },
+  { key: 'pink', label: 'ピンク' },
+  { key: 'purple', label: '紫' },
+  { key: 'rainbow', label: 'レインボー' },
+];
+const DEFAULT_COLOR = 'white';
+const COLOR_KEYS = COLORS.map((c) => c.key);
+
 function computeLevel(totalSeconds) {
   return Math.floor(totalSeconds / SECONDS_PER_LEVEL) + 1;
 }
@@ -23,6 +38,7 @@ function defaultState() {
     totalSeconds: 0,
     level: 1,
     companions: 0,
+    color: DEFAULT_COLOR,
   };
 }
 
@@ -30,14 +46,23 @@ function loadState(filePath) {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
+    const totalSeconds = Number(parsed.totalSeconds) || 0;
+    const level = computeLevel(totalSeconds);
     return {
-      totalSeconds: Number(parsed.totalSeconds) || 0,
-      level: computeLevel(Number(parsed.totalSeconds) || 0),
-      companions: computeCompanions(computeLevel(Number(parsed.totalSeconds) || 0)),
+      totalSeconds,
+      level,
+      companions: computeCompanions(level),
+      color: COLOR_KEYS.includes(parsed.color) ? parsed.color : DEFAULT_COLOR,
     };
   } catch (err) {
     return defaultState();
   }
+}
+
+function setColor(state, colorKey) {
+  if (!COLOR_KEYS.includes(colorKey)) return state;
+  state.color = colorKey;
+  return state;
 }
 
 function saveState(filePath, state) {
@@ -69,6 +94,7 @@ function getProgress(state) {
   return {
     level: state.level,
     companions: state.companions,
+    color: state.color,
     secondsIntoLevel,
     secondsForLevel: SECONDS_PER_LEVEL,
     ratio: secondsIntoLevel / SECONDS_PER_LEVEL,
@@ -79,11 +105,14 @@ module.exports = {
   SECONDS_PER_LEVEL,
   COMPANION_EVERY_LEVELS,
   MAX_COMPANIONS,
+  COLORS,
+  DEFAULT_COLOR,
   computeLevel,
   computeCompanions,
   defaultState,
   loadState,
   saveState,
   addActiveSeconds,
+  setColor,
   getProgress,
 };

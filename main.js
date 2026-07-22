@@ -30,6 +30,16 @@ let lastActiveWindowKey = null;
 let lastSaveTime = 0;
 let lastCommandedBounds = null;
 
+function getGroundY(winH) {
+  const work = screen.getPrimaryDisplay().workArea;
+  return work.y + work.height - winH - WINDOW_MARGIN_FROM_EDGE;
+}
+
+function getXBounds(winW) {
+  const work = screen.getPrimaryDisplay().workArea;
+  return { minX: work.x, maxX: work.x + work.width - winW };
+}
+
 const wander = {
   x: 0,
   y: 0,
@@ -84,8 +94,11 @@ function createWindow() {
   wander.x = initialX;
   wander.y = initialY;
 
-  // Windows/Linux では 'move' が移動中連続で発火する。
-  // 自分で setBounds した直後の座標と一致しなければユーザーによるドラッグとみなす。
+  // ドラッグは -webkit-app-region:drag によるOSネイティブの移動に任せている
+  // (JS側で座標を追いかける自前実装だと、カーソルが小さなウィンドウの外に
+  // 出た瞬間に mousemove が届かなくなり、追従が止まってしまうため)。
+  // 'move' は移動中連続で発火するので、自分で setBounds した直後の座標と
+  // 一致しなければユーザーによるドラッグとみなす。
   mainWindow.on('move', () => {
     if (!mainWindow) return;
     const [x, y] = mainWindow.getPosition();
@@ -98,6 +111,14 @@ function createWindow() {
       wander.mode = 'dragging';
       wander.lastMoveEventAt = Date.now();
     }
+  });
+
+  // app-region:drag のエリアを右クリックすると、DOMの'contextmenu'より先に
+  // OSの標準システムメニュー(最小化/閉じるなど)が出てしまう。これを横取りして
+  // 自前のメニューを出す。
+  mainWindow.on('system-context-menu', (event) => {
+    event.preventDefault();
+    buildContextMenu().popup({ window: mainWindow });
   });
 }
 
@@ -173,10 +194,8 @@ function wanderTick() {
   const now = Date.now();
 
   const [winW, winH] = mainWindow.getSize();
-  const { x: workX, y: workY, width: workW, height: workH } = screen.getPrimaryDisplay().workArea;
-  const minX = workX;
-  const maxX = workX + workW - winW;
-  const groundY = workY + workH - winH - WINDOW_MARGIN_FROM_EDGE;
+  const { minX, maxX } = getXBounds(winW);
+  const groundY = getGroundY(winH);
 
   // ドラッグ中: OSに位置を委ね、動きが止まったら「手を離した」とみなして落下開始
   if (wander.mode === 'dragging') {
@@ -292,6 +311,19 @@ function buildContextMenu() {
     {
       label: config.wander ? '歩き回るのをやめさせる' : '歩き回らせる',
       click: () => toggleWander(),
+    },
+    {
+      label: '色を変える',
+      submenu: petState.COLORS.map((c) => ({
+        label: c.label,
+        type: 'radio',
+        checked: state.color === c.key,
+        click: () => {
+          petState.setColor(state, c.key);
+          petState.saveState(STATE_FILE, state);
+          sendState();
+        },
+      })),
     },
     {
       label: 'データをリセット',

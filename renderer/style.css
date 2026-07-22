@@ -74,6 +74,52 @@ body {
   height: 12px;
   background: #111111;
   border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+/* --- 色バリエーション(すべて無料) --- */
+body[data-color='black'] .pet {
+  background: #1f1f1f;
+}
+body[data-color='red'] .pet {
+  background: #ef4444;
+}
+body[data-color='blue'] .pet {
+  background: #3b82f6;
+}
+body[data-color='green'] .pet {
+  background: #22c55e;
+}
+body[data-color='yellow'] .pet {
+  background: #facc15;
+}
+body[data-color='pink'] .pet {
+  background: #f472b6;
+}
+body[data-color='purple'] .pet {
+  background: #8b5cf6;
+}
+
+/* レインボーは ::before に敷いて transform/animation の競合(bob等)を避ける */
+body[data-color='rainbow'] .pet {
+  background: transparent;
+}
+body[data-color='rainbow'] .pet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: hsl(0, 85%, 60%);
+  animation: pet-rainbow 4s linear infinite;
+}
+
+@keyframes pet-rainbow {
+  from {
+    filter: hue-rotate(0deg);
+  }
+  to {
+    filter: hue-rotate(360deg);
+  }
 }
 
 .pet.companion .eye {
@@ -152,7 +198,6 @@ body.landed .pet {
   text-align: center;
   opacity: 1;
   transition: opacity 0.25s ease;
-  -webkit-app-region: no-drag;
 }
 
 #speech-bubble::after {
@@ -179,7 +224,6 @@ body.landed .pet {
   border: 1px solid #333333;
   border-radius: 4px;
   overflow: hidden;
-  -webkit-app-region: no-drag;
 }
 
 #exp-fill {
