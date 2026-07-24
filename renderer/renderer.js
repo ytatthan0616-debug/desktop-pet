@@ -5,6 +5,10 @@ const expFillEl = document.getElementById('exp-fill');
 let hideBubbleTimer = null;
 let renderedCompanionCount = -1;
 
+// 子分は主人のスキン選択とは無関係に、この中からランダムに選ばれる
+// 海の仲間のドット絵を表示する。
+const COMPANION_SKINS = ['jellyfish', 'octopus', 'squid'];
+
 // 子分は主人と同じウィンドウの中に並べて表示する。歩く/走る/跳ぶ/転がる等の
 // アニメーションは共通のCSSクラス経由で全ての.petに掛かるので、主人と全く同じ
 // 動きをする(別ウィンドウにして個別のtransformを持たせると、この同期が崩れる)。
@@ -24,8 +28,15 @@ function createPetElement(isCompanion) {
   pet.appendChild(left);
   pet.appendChild(right);
 
-  // タスク固有アクション(ヘッドホン等)・就寝中のZZZは自分自身(メインのペット)にだけ表示する
-  if (!isCompanion) {
+  if (isCompanion) {
+    // 見た目(海の仲間の種類)と、明度/彩度を少しだけランダムにずらして
+    // 同じ子分でも1匹ずつ違って見えるようにする。
+    pet.dataset.skin = COMPANION_SKINS[Math.floor(Math.random() * COMPANION_SKINS.length)];
+    const brightness = Math.round(90 + Math.random() * 20);
+    const saturation = Math.round(85 + Math.random() * 30);
+    pet.style.filter = `brightness(${brightness}%) saturate(${saturation}%)`;
+  } else {
+    // タスク固有アクション(ヘッドホン等)・就寝中のZZZは自分自身(メインのペット)にだけ表示する
     const accessory = document.createElement('div');
     accessory.className = 'accessory';
     pet.appendChild(accessory);
@@ -39,15 +50,20 @@ function createPetElement(isCompanion) {
   return pet;
 }
 
+// 主人が常に中央に来るよう、子分を左右交互に振り分けて並べる。
 function renderPets(companionCount) {
   if (companionCount === renderedCompanionCount) return;
   renderedCompanionCount = companionCount;
 
   petsEl.innerHTML = '';
-  petsEl.appendChild(createPetElement(false));
+  const leftSide = [];
+  const rightSide = [];
   for (let i = 0; i < companionCount; i++) {
-    petsEl.appendChild(createPetElement(true));
+    (i % 2 === 0 ? rightSide : leftSide).push(createPetElement(true));
   }
+  leftSide.forEach((el) => petsEl.appendChild(el));
+  petsEl.appendChild(createPetElement(false));
+  rightSide.forEach((el) => petsEl.appendChild(el));
 }
 
 function showSpeech(text) {

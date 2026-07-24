@@ -12,8 +12,8 @@ const PET_SIZE = 64;
 const WINDOW_PADDING = 30; // セリフの吹き出し等がはみ出さないための余白
 const WINDOW_MARGIN_FROM_EDGE = 24;
 const ITEM_WINDOW_SIZE = 56; // 敵/コイン/骨を表示する別ウィンドウの一辺
-const GAP = 14; // 主人と子分の間隔
-const COMPANION_SIZE = 40; // 子分の見た目のサイズ
+const GAP = 10; // 主人と子分の間隔
+const COMPANION_SIZE = 28; // 子分の見た目のサイズ(最大15体まで並べても幅が際限なく広がらないよう小さめに)
 
 // --- 時間計測定数 ---
 const TICK_INTERVAL_MS = 5000; // メインループの間隔

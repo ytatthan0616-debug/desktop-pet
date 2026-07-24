@@ -8,7 +8,7 @@ const SECONDS_PER_LEVEL = 30 * 60;
 // 3レベルごとに子分が1匹増える
 const COMPANION_EVERY_LEVELS = 3;
 // 子分の最大数(ウィンドウが際限なく巨大化しないための上限)
-const MAX_COMPANIONS = 8;
+const MAX_COMPANIONS = 15;
 
 // 見た目の色。すべて無料で選択可能。
 const COLORS = [
@@ -25,12 +25,14 @@ const COLORS = [
 const DEFAULT_COLOR = 'white';
 const COLOR_KEYS = COLORS.map((c) => c.key);
 
-// 見た目(スキン)。ドット絵の犬・猫・少女もすべて無料で選択可能。
+// 見た目(スキン)。ドット絵の犬・猫・少女・ヨウガイ・魚もすべて無料で選択可能。
 const SKINS = [
   { key: 'square', label: '四角(デフォルト)' },
   { key: 'dog', label: '犬(ドット絵)' },
   { key: 'cat', label: '猫(ドット絵)' },
   { key: 'girl', label: '少女(ドット絵)' },
+  { key: 'yougai', label: 'ヨウガイ(ドット絵)' },
+  { key: 'fish', label: '魚(ドット絵)' },
 ];
 const DEFAULT_SKIN = 'square';
 const SKIN_KEYS = SKINS.map((s) => s.key);
