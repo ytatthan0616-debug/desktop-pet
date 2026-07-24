@@ -4,8 +4,6 @@ const expFillEl = document.getElementById('exp-fill');
 
 let renderedCompanionCount = -1;
 let hideBubbleTimer = null;
-let enemyEl = null;
-let lootEl = null;
 
 // --- 子分の「わらわら」動き ---
 // 子分は一列に並ばず、主人のまわりをそれぞれ独立に地面を跳ねながら動き回る。
@@ -111,54 +109,6 @@ function renderPets(companionCount) {
   }
 }
 
-function spawnEnemy() {
-  if (enemyEl) return;
-  const enemy = document.createElement('div');
-  enemy.className = 'enemy';
-  const sprite = document.createElement('div');
-  sprite.className = 'enemy-sprite';
-  enemy.appendChild(sprite);
-  petsEl.appendChild(enemy);
-  enemyEl = enemy;
-  document.body.classList.add('battling');
-  // 追加直後は opacity:0 の状態なので、1フレーム後にクラスを付けて登場アニメーションさせる
-  requestAnimationFrame(() => {
-    if (enemyEl === enemy) enemy.classList.add('enemy-enter');
-  });
-}
-
-function clearEnemy() {
-  document.body.classList.remove('battling');
-  if (!enemyEl) return;
-  const el = enemyEl;
-  enemyEl = null;
-  el.classList.remove('enemy-enter');
-  el.classList.add('enemy-defeated');
-  setTimeout(() => el.remove(), 400);
-}
-
-function spawnLoot(kind) {
-  if (lootEl) return;
-  const loot = document.createElement('div');
-  loot.className = `loot ${kind}`;
-  petsEl.appendChild(loot);
-  lootEl = loot;
-  document.body.classList.add('looting');
-  requestAnimationFrame(() => {
-    if (lootEl === loot) loot.classList.add('loot-enter');
-  });
-}
-
-function clearLoot() {
-  document.body.classList.remove('looting');
-  if (!lootEl) return;
-  const el = lootEl;
-  lootEl = null;
-  el.classList.remove('loot-enter');
-  el.classList.add('loot-cleared');
-  setTimeout(() => el.remove(), 400);
-}
-
 function showSpeech(text) {
   bubbleEl.textContent = text;
   bubbleEl.classList.remove('hidden');
@@ -187,6 +137,7 @@ window.petAPI.onWalkState((data) => {
   document.body.classList.toggle('dragging', !!data.dragging);
   document.body.classList.toggle('facing-left', data.facing === 'left');
   document.body.classList.toggle('facing-right', data.facing === 'right');
+  document.body.dataset.moveStyle = data.moveStyle || 'walk';
 
   const height = Math.max(0, Math.min(200, data.heightAboveGround || 0));
   const shadowScale = Math.max(0.15, 1 - height / 260);
@@ -207,24 +158,26 @@ window.petAPI.onTaskAction((data) => {
   }
 });
 
+// 敵/コイン/骨の本体は別ウィンドウ(item.html)側で表示するので、
+// メインのペット側ではその場に居る間の反応アニメーションだけを切り替える。
 window.petAPI.onEnemySpawn(() => {
-  spawnEnemy();
+  document.body.classList.add('battling');
 });
 
 window.petAPI.onEnemyClear(() => {
-  clearEnemy();
+  document.body.classList.remove('battling');
 });
 
 window.petAPI.onSleepState((data) => {
   document.body.classList.toggle('sleeping', !!data.sleeping);
 });
 
-window.petAPI.onLootSpawn((data) => {
-  spawnLoot(data.kind);
+window.petAPI.onLootSpawn(() => {
+  document.body.classList.add('looting');
 });
 
 window.petAPI.onLootClear(() => {
-  clearLoot();
+  document.body.classList.remove('looting');
 });
 
 window.petAPI.onLanded(() => {

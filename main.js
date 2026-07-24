@@ -12,7 +12,7 @@ const PET_SIZE = 64;
 const WINDOW_PADDING = 30; // セリフの吹き出し等がはみ出さないための余白
 const WINDOW_MARGIN_FROM_EDGE = 24;
 const SWARM_VERTICAL_ROOM = 20; // 子分が跳ねる分の縦方向の余白(子分がいる時のみ加算)
-const ENEMY_SLOT_WIDTH = 60; // 敵(ウイルス)を表示するために追加するウィンドウ幅
+const ITEM_WINDOW_SIZE = 56; // 敵/コイン/骨を表示する別ウィンドウの一辺
 
 // --- 時間計測定数 ---
 const TICK_INTERVAL_MS = 5000; // メインループの間隔
@@ -38,6 +38,14 @@ const LOAD_STRESSED_THRESHOLD = 80;
 const WANDER_TICK_MS = 50;
 const DRAG_END_DEBOUNCE_MS = 220; // 最後の move イベントからこれだけ経ったら「手を離した」とみなす
 const GRAVITY_PX_PER_S2 = 2200; // 落下の加速度
+const RUN_SPEED_MULTIPLIER = 2.2; // 「走る」時の速度倍率
+const ROLL_SPEED_MULTIPLIER = 1.6; // 「転がる」時の速度倍率
+const JUMP_HEIGHT_PX = 46; // 「ジャンプ」の高さ
+const JUMP_PERIOD_MS = 600; // ジャンプ1回分の周期
+// 通常の歩行時に選ばれる移動スタイル。walkを多めにして、run/jump/rollはたまに混ざる程度にする。
+const WALK_STYLES = ['walk', 'walk', 'walk', 'run', 'jump', 'roll'];
+const MOVING_MODES = new Set(['walk', 'run', 'jump', 'roll']);
+const MOVING_LIKE_MODES = new Set(['walk', 'run', 'jump', 'roll', 'seek']);
 
 let mainWindow = null;
 let tickIntervalId = null;
@@ -52,12 +60,11 @@ let lastSaveTime = 0;
 let lastCommandedBounds = null;
 let prevCpuCores = os.cpus();
 let battleActive = false;
-let battleTimeoutId = null;
 let lastEnemyAt = 0;
 let lootActive = false;
-let lootTimeoutId = null;
 let lastLootAt = 0;
 let isSleeping = false;
+let itemWindow = null; // 敵/コイン/骨を表示する別ウィンドウ
 
 function getGroundY(display, winH) {
   const work = display.workArea;
@@ -74,28 +81,34 @@ const wander = {
   y: 0,
   vy: 0, // 落下時の垂直速度
   direction: 1, // 1: 右へ, -1: 左へ
-  mode: 'idle', // 'idle' | 'walk' | 'dragging' | 'falling' | 'action'
+  // 'idle' | 'walk' | 'run' | 'jump' | 'roll' | 'seek' | 'dragging' | 'falling' | 'action'
+  mode: 'idle',
   modeUntil: 0,
   lastMoveEventAt: 0,
+  jumpStartAt: 0,
+  seekTargetX: 0,
+  onArrive: null, // 'seek'で目的地に着いた時に呼ぶコールバック
+  actionKind: null, // 'action'モード中の内訳: 'task' | 'loot' | 'battle'
   lastSentFacing: null,
   lastSentWalking: null,
+  lastSentMoveStyle: null,
   lastSentFalling: null,
   lastSentDragging: null,
   lastSentHeight: 0,
 };
 
 // 子分は一列に並ばず主人のまわりで地面を跳ねながら動き回る(renderer側でランダムに位置を動かす)ので、
-// 子分の数に応じて「動き回れる余白」をウィンドウに持たせる。戦闘中は敵の表示スペースも足す。
-function computeWindowSize(companionCount, isBattleActive) {
+// 子分の数に応じて「動き回れる余白」をウィンドウに持たせる。
+// 敵/コイン/骨は別ウィンドウで表示するため、ここではメインウィンドウのサイズには影響しない。
+function computeWindowSize(companionCount) {
   const swarmRadius = companionCount > 0 ? Math.min(130, 50 + companionCount * 11) : 0;
-  const enemyWidth = isBattleActive ? ENEMY_SLOT_WIDTH : 0;
-  const width = WINDOW_PADDING * 2 + PET_SIZE + swarmRadius * 2 + enemyWidth;
+  const width = WINDOW_PADDING * 2 + PET_SIZE + swarmRadius * 2;
   const height = WINDOW_PADDING * 2 + PET_SIZE + 40 + (companionCount > 0 ? SWARM_VERTICAL_ROOM : 0); // 40 = 吹き出し用の余白
   return { width: Math.round(width), height: Math.round(height) };
 }
 
 function createWindow() {
-  const { width, height } = computeWindowSize(state.companions, battleActive);
+  const { width, height } = computeWindowSize(state.companions);
   const display = screen.getPrimaryDisplay();
   const { x: wx, y: wy, width: wW, height: wH } = display.workArea;
 
@@ -138,6 +151,11 @@ function createWindow() {
     const matchesCommand =
       lastCommandedBounds && Math.abs(x - lastCommandedBounds.x) <= 1 && Math.abs(y - lastCommandedBounds.y) <= 1;
     if (!matchesCommand) {
+      // 敵/落し物イベントの途中(移動中や対応中)でユーザーに掴まれたら、
+      // 中途半端な状態が残らないよう即座に片付ける。
+      if (wander.mode === 'seek' || wander.mode === 'action') {
+        cancelPendingEvent();
+      }
       wander.x = x;
       wander.y = y;
       wander.vy = 0;
@@ -158,14 +176,7 @@ function createWindow() {
   // アクセスしてしまわないよう、破棄と同時にタイマーを止める。
   mainWindow.on('closed', () => {
     stopTimers();
-    if (battleTimeoutId) {
-      clearTimeout(battleTimeoutId);
-      battleTimeoutId = null;
-    }
-    if (lootTimeoutId) {
-      clearTimeout(lootTimeoutId);
-      lootTimeoutId = null;
-    }
+    closeItemWindow(false);
     mainWindow = null;
   });
 }
@@ -190,7 +201,7 @@ function moveWindowTo(x, y, width, height) {
 
 function resizeWindowForLayout() {
   if (!mainWindow) return;
-  const { width, height } = computeWindowSize(state.companions, battleActive);
+  const { width, height } = computeWindowSize(state.companions);
   const [curX, curY] = mainWindow.getPosition();
   const [curW, curH] = mainWindow.getSize();
   // 右下を基準に、幅が増えた分だけ左に伸ばす
@@ -199,6 +210,125 @@ function resizeWindowForLayout() {
   wander.x = newX;
   wander.y = newY;
   moveWindowTo(newX, newY, width, height);
+}
+
+// 敵(ウイルス)/コイン/骨を、ペットのウィンドウとは別の透明ウィンドウとして
+// 画面上のランダムな位置(地面の高さ)に表示する。
+function spawnItemWindow(kind) {
+  closeItemWindow(false);
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(wander.x + PET_SIZE / 2),
+    y: Math.round(wander.y),
+  });
+  const work = display.workArea;
+  const x = Math.round(work.x + Math.random() * Math.max(0, work.width - ITEM_WINDOW_SIZE));
+  const y = work.y + work.height - ITEM_WINDOW_SIZE - WINDOW_MARGIN_FROM_EDGE;
+
+  const win = new BrowserWindow({
+    width: ITEM_WINDOW_SIZE,
+    height: ITEM_WINDOW_SIZE,
+    x,
+    y,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.loadFile(path.join(__dirname, 'renderer', 'item.html'), { query: { kind } });
+  win.on('closed', () => {
+    if (itemWindow === win) itemWindow = null;
+  });
+  itemWindow = win;
+  return { x, y, width: ITEM_WINDOW_SIZE, height: ITEM_WINDOW_SIZE };
+}
+
+// withExitAnimation: trueならアイテム側にゆっくり消えるアニメーションをさせてから閉じる。
+// falseなら(ドラッグ割り込み等の)即時クローズ。
+function closeItemWindow(withExitAnimation) {
+  if (!itemWindow || itemWindow.isDestroyed()) {
+    itemWindow = null;
+    return;
+  }
+  const win = itemWindow;
+  itemWindow = null;
+  if (withExitAnimation) {
+    win.webContents
+      .executeJavaScript(
+        "document.querySelectorAll('.loot, .enemy').forEach((el) => { el.classList.remove('loot-enter', 'enemy-enter'); el.classList.add(el.classList.contains('enemy') ? 'enemy-defeated' : 'loot-cleared'); });"
+      )
+      .catch(() => {});
+    setTimeout(() => {
+      if (!win.isDestroyed()) win.close();
+    }, 380);
+  } else {
+    win.close();
+  }
+}
+
+// 別ウィンドウで表示したアイテムの中心を、ペットのウィンドウ座標系での目標X座標に変換する
+// (ウィンドウ幅の半分だけ差し引いて、ペットの中心がアイテムに重なる位置を狙う)。
+function computeSeekTargetX(item) {
+  if (!mainWindow) return wander.x;
+  const [winW] = mainWindow.getSize();
+  const display = screen.getDisplayNearestPoint({ x: item.x, y: item.y });
+  const { minX, maxX } = getXBounds(display, winW);
+  const raw = Math.round(item.x + item.width / 2 - winW / 2);
+  return Math.max(minX, Math.min(maxX, raw));
+}
+
+// 目標X座標まで「走って」向かい、着いたら onArrive を呼ぶ。
+function startSeek(targetX, onArrive) {
+  wander.mode = 'seek';
+  wander.seekTargetX = targetX;
+  wander.onArrive = onArrive;
+}
+
+// 'action'モードが時間切れで終わった時の後片付け。actionKindに応じて内容を分岐する。
+function finishAction() {
+  const kind = wander.actionKind;
+  wander.actionKind = null;
+  if (kind === 'task') {
+    sendTaskAction(null);
+  } else if (kind === 'loot') {
+    lootActive = false;
+    sendLooting(false);
+    closeItemWindow(true);
+  } else if (kind === 'battle') {
+    battleActive = false;
+    sendBattling(false);
+    sendSpeech(speech.speechForEnemyDefeated());
+    closeItemWindow(true);
+  }
+}
+
+// ドラッグや就寝などで進行中のイベント(移動中/対応中の両方)に割り込まれた時、
+// 中途半端な状態(消えないアクセサリーやウィンドウ)が残らないよう即座に片付ける。
+function cancelPendingEvent() {
+  const kind = wander.actionKind;
+  wander.actionKind = null;
+  wander.onArrive = null;
+  if (kind === 'task') {
+    sendTaskAction(null);
+  } else if (kind === 'loot') {
+    lootActive = false;
+    sendLooting(false);
+    closeItemWindow(false);
+  } else if (kind === 'battle') {
+    battleActive = false;
+    sendBattling(false);
+    closeItemWindow(false);
+  } else if (lootActive || battleActive) {
+    // 'seek'で目的地に向かっている途中(まだ到着前)に割り込まれたケース
+    lootActive = false;
+    battleActive = false;
+    closeItemWindow(false);
+  }
 }
 
 function sendState() {
@@ -214,23 +344,27 @@ function sendSpeech(text) {
 function sendWalkState(force, heightAboveGround = 0) {
   if (!mainWindow) return;
   const facing = wander.direction >= 0 ? 'right' : 'left';
-  const walking = config.wander && wander.mode === 'walk';
+  const walking = MOVING_LIKE_MODES.has(wander.mode);
+  // 'seek'(敵/落し物に向かって走る)は見た目上は「走る」として扱う
+  const moveStyle = wander.mode === 'seek' ? 'run' : wander.mode;
   const falling = wander.mode === 'falling';
   const dragging = wander.mode === 'dragging';
   const height = Math.round(heightAboveGround);
   const changed =
     facing !== wander.lastSentFacing ||
     walking !== wander.lastSentWalking ||
+    moveStyle !== wander.lastSentMoveStyle ||
     falling !== wander.lastSentFalling ||
     dragging !== wander.lastSentDragging ||
     Math.abs(height - wander.lastSentHeight) >= 2;
   if (!force && !changed) return;
   wander.lastSentFacing = facing;
   wander.lastSentWalking = walking;
+  wander.lastSentMoveStyle = moveStyle;
   wander.lastSentFalling = falling;
   wander.lastSentDragging = dragging;
   wander.lastSentHeight = height;
-  mainWindow.webContents.send('walk-state', { facing, walking, falling, dragging, heightAboveGround: height });
+  mainWindow.webContents.send('walk-state', { facing, walking, moveStyle, falling, dragging, heightAboveGround: height });
 }
 
 function sendLanded() {
@@ -248,24 +382,14 @@ function sendSleepState(sleeping) {
   mainWindow.webContents.send('sleep-state', { sleeping });
 }
 
-function sendLootSpawn(kind) {
+function sendLooting(active) {
   if (!mainWindow) return;
-  mainWindow.webContents.send('loot-spawn', { kind });
+  mainWindow.webContents.send(active ? 'loot-spawn' : 'loot-clear');
 }
 
-function sendLootClear() {
+function sendBattling(active) {
   if (!mainWindow) return;
-  mainWindow.webContents.send('loot-clear');
-}
-
-function sendEnemySpawn() {
-  if (!mainWindow) return;
-  mainWindow.webContents.send('enemy-spawn');
-}
-
-function sendEnemyClear() {
-  if (!mainWindow) return;
-  mainWindow.webContents.send('enemy-clear');
+  mainWindow.webContents.send(active ? 'enemy-spawn' : 'enemy-clear');
 }
 
 function cpuTimesTotal(cores) {
@@ -316,13 +440,14 @@ function randRange([min, max]) {
 }
 
 function pickNextWanderMode(now) {
-  if (wander.mode === 'walk') {
+  if (MOVING_MODES.has(wander.mode)) {
     wander.mode = 'idle';
     wander.modeUntil = now + randRange(config.idleDurationMs);
   } else {
-    wander.mode = 'walk';
+    wander.mode = WALK_STYLES[Math.floor(Math.random() * WALK_STYLES.length)];
     if (Math.random() < 0.5) wander.direction *= -1;
     wander.modeUntil = now + randRange(config.walkDurationMs);
+    wander.jumpStartAt = now;
   }
 }
 
@@ -371,13 +496,36 @@ function wanderTick() {
     return;
   }
 
-  // タスク固有アクション中: 対象ウィンドウのそばで静止し、時間が来たら通常状態に戻す
+  // 'action'中(タスク固有アクション/落し物/戦闘): その場に留まり、時間が来たら片付けて通常状態に戻す
   if (wander.mode === 'action') {
     if (now >= wander.modeUntil) {
       wander.mode = 'idle';
       wander.modeUntil = now + randRange(config.idleDurationMs);
-      sendTaskAction(null);
+      finishAction();
     }
+    sendWalkState(false, 0);
+    return;
+  }
+
+  // 'seek'中: 敵/落し物に向かって走って移動し、着いたらコールバックを呼ぶ
+  if (wander.mode === 'seek') {
+    const step = (config.wanderSpeedPxPerSec * RUN_SPEED_MULTIPLIER * WANDER_TICK_MS) / 1000;
+    const remaining = wander.seekTargetX - wander.x;
+    if (Math.abs(remaining) <= step) {
+      wander.x = wander.seekTargetX;
+      wander.y = groundY;
+      moveWindowTo(wander.x, wander.y, winW, winH);
+      const onArrive = wander.onArrive;
+      wander.onArrive = null;
+      sendWalkState(true, 0);
+      if (onArrive) onArrive();
+      return;
+    }
+    wander.direction = remaining > 0 ? 1 : -1;
+    wander.x += step * wander.direction;
+    wander.x = Math.max(minX, Math.min(maxX, wander.x));
+    wander.y = groundY;
+    moveWindowTo(wander.x, wander.y, winW, winH);
     sendWalkState(false, 0);
     return;
   }
@@ -386,8 +534,9 @@ function wanderTick() {
   if (!config.wander || isSleeping) return;
   if (now >= wander.modeUntil) pickNextWanderMode(now);
 
-  if (wander.mode === 'walk') {
-    const dx = ((config.wanderSpeedPxPerSec * WANDER_TICK_MS) / 1000) * wander.direction;
+  if (MOVING_MODES.has(wander.mode)) {
+    const speedMultiplier = wander.mode === 'run' ? RUN_SPEED_MULTIPLIER : wander.mode === 'roll' ? ROLL_SPEED_MULTIPLIER : 1;
+    const dx = ((config.wanderSpeedPxPerSec * speedMultiplier * WANDER_TICK_MS) / 1000) * wander.direction;
     wander.x += dx;
     if (wander.x <= minX) {
       wander.x = minX;
@@ -398,10 +547,17 @@ function wanderTick() {
     }
   }
   wander.x = Math.max(minX, Math.min(maxX, wander.x));
-  wander.y = groundY;
+
+  // ジャンプ中だけ地面から浮く(sin弧)。跳ねている高さは影の大きさにも使う。
+  let heightAboveGround = 0;
+  if (wander.mode === 'jump') {
+    const t = ((now - wander.jumpStartAt) % JUMP_PERIOD_MS) / JUMP_PERIOD_MS;
+    heightAboveGround = Math.max(0, Math.sin(t * Math.PI)) * JUMP_HEIGHT_PX;
+  }
+  wander.y = groundY - heightAboveGround;
 
   moveWindowTo(wander.x, wander.y, winW, winH);
-  sendWalkState(false, 0);
+  sendWalkState(false, heightAboveGround);
 }
 
 function toggleWander() {
@@ -427,7 +583,8 @@ async function maybeStartTaskAction(activeWin, category) {
   if (!mainWindow || !category) return;
   const actionKey = speech.actionForCategory(category.key);
   if (!actionKey) return;
-  if (wander.mode === 'dragging' || wander.mode === 'falling') return;
+  if (wander.mode === 'dragging' || wander.mode === 'falling' || wander.mode === 'seek') return;
+  if (battleActive || lootActive) return;
 
   const now = Date.now();
   if (actionKey === lastActionCategoryKey && now - lastActionAt < TASK_ACTION_MIN_INTERVAL_MS) return;
@@ -474,6 +631,7 @@ async function maybeStartTaskAction(activeWin, category) {
   wander.y = groundY;
   wander.vy = 0;
   wander.mode = 'action';
+  wander.actionKind = 'task';
   wander.modeUntil = now + TASK_ACTION_DURATION_MS;
   lastActionAt = now;
   lastActionCategoryKey = actionKey;
@@ -483,11 +641,12 @@ async function maybeStartTaskAction(activeWin, category) {
   sendTaskAction(actionKey);
 }
 
-// たまにウイルスっぽい敵を出現させ、少しの間ペットたちに「戦わせる」演出をする。
+// たまにウイルスっぽい敵を画面上のランダムな位置(別ウィンドウ)に出現させ、
+// 主人がそこまで走って行って少しの間「戦う」演出をする。
 // ゲーム的な報酬などは無く、見た目だけの一発イベント。
 function maybeSpawnEnemy(now) {
   if (battleActive || lootActive) return;
-  if (wander.mode === 'dragging' || wander.mode === 'falling') return;
+  if (wander.mode === 'dragging' || wander.mode === 'falling' || wander.mode === 'seek') return;
   if (now - lastEnemyAt < ENEMY_MIN_INTERVAL_MS) return;
   if (Math.random() > TICK_SECONDS / ENEMY_AVG_INTERVAL_SECONDS) return;
   startEnemyBattle(now);
@@ -497,26 +656,22 @@ function startEnemyBattle(now) {
   if (!mainWindow) return;
   battleActive = true;
   lastEnemyAt = now;
-  resizeWindowForLayout();
+  const item = spawnItemWindow('enemy');
   sendSpeech(speech.speechForEnemyAppear());
-  sendEnemySpawn();
-  if (battleTimeoutId) clearTimeout(battleTimeoutId);
-  battleTimeoutId = setTimeout(endEnemyBattle, ENEMY_BATTLE_DURATION_MS);
+  startSeek(computeSeekTargetX(item), () => {
+    wander.mode = 'action';
+    wander.actionKind = 'battle';
+    wander.modeUntil = Date.now() + ENEMY_BATTLE_DURATION_MS;
+    sendBattling(true);
+  });
 }
 
-function endEnemyBattle() {
-  battleTimeoutId = null;
-  battleActive = false;
-  sendEnemyClear();
-  sendSpeech(speech.speechForEnemyDefeated());
-  resizeWindowForLayout();
-}
-
-// たまに足元にコインか骨付き肉を落としておき、主人がそれを拾って食べる演出をする。
+// たまにコインか骨付き肉を画面上のランダムな位置(別ウィンドウ)に落としておき、
+// 主人がそこまで走って行って拾って食べる演出をする。
 // こちらもゲーム的な報酬(所持数など)は持たせず、見た目だけの一発イベント。
 function maybeSpawnLoot(now) {
   if (lootActive || battleActive) return;
-  if (wander.mode === 'dragging' || wander.mode === 'falling') return;
+  if (wander.mode === 'dragging' || wander.mode === 'falling' || wander.mode === 'seek') return;
   if (now - lastLootAt < LOOT_MIN_INTERVAL_MS) return;
   if (Math.random() > TICK_SECONDS / LOOT_AVG_INTERVAL_SECONDS) return;
   startLoot(now);
@@ -527,16 +682,14 @@ function startLoot(now) {
   const kind = Math.random() < 0.5 ? 'coin' : 'bone';
   lootActive = true;
   lastLootAt = now;
+  const item = spawnItemWindow(kind);
   sendSpeech(speech.speechForLootFound(kind));
-  sendLootSpawn(kind);
-  if (lootTimeoutId) clearTimeout(lootTimeoutId);
-  lootTimeoutId = setTimeout(endLoot, LOOT_DURATION_MS);
-}
-
-function endLoot() {
-  lootTimeoutId = null;
-  lootActive = false;
-  sendLootClear();
+  startSeek(computeSeekTargetX(item), () => {
+    wander.mode = 'action';
+    wander.actionKind = 'loot';
+    wander.modeUntil = Date.now() + LOOT_DURATION_MS;
+    sendLooting(true);
+  });
 }
 
 async function checkActiveWindow() {
@@ -573,7 +726,10 @@ function tick() {
   if (sleeping !== isSleeping) {
     isSleeping = sleeping;
     if (isSleeping) {
-      // 眠りに入る瞬間、歩行中でも即座に静止させて見た目を寝姿に切り替える
+      // 眠りに入る瞬間、移動中/イベント対応中でも即座に片付けて寝姿に切り替える
+      if (wander.mode === 'seek' || wander.mode === 'action') {
+        cancelPendingEvent();
+      }
       wander.mode = 'idle';
       sendWalkState(true);
     }

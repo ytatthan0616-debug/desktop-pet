@@ -233,7 +233,10 @@ body[data-expression='stressed'] .eye {
   }
 }
 
-body.walking .pet {
+/* 子分はswarmTick(renderer.js)が毎フレームtransformを書き換えて跳ね回らせているため、
+   walking/falling/landedの各アニメーションは主人(.pet.main)だけに適用する。
+   .petに直接掛けると子分のtransformが上書きされ、瞬間的に中央へ消えて見えてしまう。 */
+body.walking .pet.main {
   animation: pet-bob 0.35s ease-in-out infinite;
 }
 
@@ -247,14 +250,57 @@ body.walking .pet {
   }
 }
 
+/* --- 移動スタイル(main.jsがwander.modeに応じてdata-move-styleを切り替える) --- */
+
+/* 走る: 通常より速いピッチでボブする */
+body.walking[data-move-style='run'] .pet.main {
+  animation: pet-bob 0.16s ease-in-out infinite;
+}
+
+/* ジャンプ: 主人のウィンドウ自体がmain.js側で弧を描いて上下するので、
+   スプライト側は着地の瞬間だけ軽くスクワッシュ&ストレッチさせる */
+body.walking[data-move-style='jump'] .pet.main {
+  animation: pet-jump-squash 0.6s ease-in-out infinite;
+}
+
+@keyframes pet-jump-squash {
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1);
+  }
+  50% {
+    transform: scaleY(1.1) scaleX(0.92);
+  }
+}
+
+/* 転がる: 進行方向にくるくる回転しながら移動する。
+   他の状態は足元(bottom center)を軸にしているが、回転はそれだと下にはみ出すため中央を軸にする。 */
+body.walking[data-move-style='roll'] .pet.main {
+  animation: pet-roll 0.5s linear infinite;
+  transform-origin: center;
+}
+
+body.walking.facing-left[data-move-style='roll'] .pet.main {
+  animation-direction: reverse;
+}
+
+@keyframes pet-roll {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* 落下中: わずかに縦に伸びるスクワッシュ&ストレッチ */
-body.falling .pet {
+body.falling .pet.main {
   transform: scaleY(1.12) scaleX(0.94);
   transition: transform 0.08s linear;
 }
 
 /* 着地の瞬間だけ再生されるバウンス */
-body.landed .pet {
+body.landed .pet.main {
   animation: pet-land 0.32s ease-out;
 }
 
@@ -403,29 +449,29 @@ body.battling .pet.main {
   }
 }
 
+/* 敵/コイン/骨はペットとは別の小さな透明ウィンドウ(renderer/item.html)の中で
+   単体表示するので、ここでは自分自身を中心に据えるだけでよい。 */
 .enemy {
-  position: absolute;
-  right: -6px;
-  bottom: 0;
+  position: relative;
   width: 40px;
   height: 40px;
   opacity: 0;
-  transform: translateX(24px) scale(0.6);
+  transform: scale(0.5);
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    opacity 0.7s ease-out,
+    transform 0.7s ease-out;
   pointer-events: none;
 }
 
 .enemy.enemy-enter {
   opacity: 1;
-  transform: translateX(0) scale(1);
+  transform: scale(1);
   animation: enemy-float 1.3s ease-in-out infinite;
 }
 
 .enemy.enemy-defeated {
   opacity: 0;
-  transform: translateX(10px) scale(0.2) rotate(30deg);
+  transform: scale(0.2) rotate(30deg);
   transition:
     opacity 0.35s ease,
     transform 0.35s ease;
@@ -467,19 +513,15 @@ body.looting .pet.main {
 }
 
 .loot {
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  margin-left: 30px; /* 主人の少し右側に置く */
+  position: relative;
   width: 18px;
   height: 18px;
   opacity: 0;
   transform: scale(0.4);
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    opacity 0.7s ease-out,
+    transform 0.7s ease-out;
   pointer-events: none;
-  z-index: 2; /* 子分(z-index:1)が跳ねて重なっても隠れないようにする */
 }
 
 .loot.loot-enter {
@@ -520,8 +562,6 @@ body.looting .pet.main {
 .loot.bone {
   width: 22px;
   height: 12px;
-  margin-left: 28px;
-  bottom: 4px;
   background: #f5ecd9;
   border: 2px solid #b8a06a;
   border-radius: 4px;
