@@ -8,6 +8,9 @@ const PALETTES = {
 };
 
 const GRIDS = {
+  // 頭+耳+マズルは元の絵をほぼ踏襲しつつ、下2〜3行を4本足(前後2本ずつ、
+  // 左右対称なので鏡像で計4本になる)専用に割り当てて、顔だけで浮いて
+  // 見えないよう「4足で立っている」のがわかる姿にしている。
   dog: [
     '........',
     '.....FFF',
@@ -18,13 +21,13 @@ const GRIDS = {
     'EEE.FFFF',
     'EE..FFFF',
     'E...FFFF',
-    '....FFFF',
     '....FFSS',
-    '....FSSS',
     '....FSSN',
-    '....FSSS',
     '....FFFF',
-    '........',
+    '....FFFF',
+    '.F..F...',
+    '.F..F...',
+    '.S..S...',
   ],
   cat: [
     '.....F..',
@@ -40,9 +43,9 @@ const GRIDS = {
     '.FFFWWWN',
     '.FFFWWWW',
     '.FFFFFFF',
-    '.FFFFFFF',
-    '........',
-    '........',
+    '..F..F..',
+    '..F..F..',
+    '..W..W..',
   ],
   girl: [
     '.....HHH',
@@ -76,7 +79,10 @@ for (const [skin, rows] of Object.entries(GRIDS)) {
       if (ch === '.') return;
       const color = palette[ch];
       if (!color) throw new Error(`${skin} row ${r} unknown char "${ch}"`);
-      shadows.push(`${c * PX}px ${r * PX}px 0 0 ${color}`);
+      // spread-radiusを少し持たせて隣同士を1pxずつ重ねる。子分表示ではscale(0.625)で
+      // 縮小するため、重なりが無いと境界のアンチエイリアスで隙間(ポリゴンの継ぎ目)が
+      // 見えてしまう。
+      shadows.push(`${c * PX}px ${r * PX}px 0 1px ${color}`);
     });
   });
   console.log(`\nbody[data-skin='${skin}'] .pixel-sprite {`);
