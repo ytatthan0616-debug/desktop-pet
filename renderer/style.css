@@ -259,6 +259,120 @@ body.landed .pet {
   }
 }
 
+/* --- タスク固有アクション(main.jsが対象ウィンドウの近くへ移動させ、
+   task-action イベントで data-action を切り替える) ---
+   音楽=ヘッドホン、勉強=本、タイマー=時計 を体の横に添える。 */
+.accessory {
+  display: none;
+  position: absolute;
+  pointer-events: none;
+}
+
+body[data-action] .pet.main .accessory {
+  display: block;
+}
+
+body.facing-left .pet.main .accessory {
+  transform: scaleX(-1);
+}
+
+/* 音楽: 頭に着けたヘッドホン */
+body[data-action='music'] .pet.main .accessory {
+  top: -10px;
+  left: 6px;
+  width: 52px;
+  height: 26px;
+}
+body[data-action='music'] .pet.main .accessory::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8px;
+  width: 36px;
+  height: 16px;
+  border: 4px solid #2b2b2b;
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+}
+body[data-action='music'] .pet.main .accessory::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 2px;
+  width: 10px;
+  height: 14px;
+  background: #2b2b2b;
+  border-radius: 4px;
+  box-shadow: 38px 0 0 0 #2b2b2b;
+}
+
+/* 勉強: 開いた本を抱えている */
+body[data-action='study'] .pet.main .accessory {
+  bottom: -4px;
+  left: 12px;
+  width: 40px;
+  height: 20px;
+}
+body[data-action='study'] .pet.main .accessory::before,
+body[data-action='study'] .pet.main .accessory::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  background: #f6f1e3;
+  border: 2px solid #333333;
+}
+body[data-action='study'] .pet.main .accessory::before {
+  left: 0;
+  border-radius: 2px 0 0 2px;
+  transform: rotate(-6deg);
+}
+body[data-action='study'] .pet.main .accessory::after {
+  left: 18px;
+  border-radius: 0 2px 2px 0;
+  transform: rotate(6deg);
+}
+
+/* タイマー: 頭上に浮かぶ時計。針が回って計測中を表す */
+body[data-action='timer'] .pet.main .accessory {
+  top: -22px;
+  left: 20px;
+  width: 24px;
+  height: 24px;
+}
+body[data-action='timer'] .pet.main .accessory::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  background: #f4f4f4;
+  border: 3px solid #333333;
+  border-radius: 50%;
+}
+body[data-action='timer'] .pet.main .accessory::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 9px;
+  width: 2px;
+  height: 8px;
+  background: #333333;
+  transform-origin: bottom center;
+  animation: timer-tick 2s steps(12) infinite;
+}
+
+@keyframes timer-tick {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 #speech-bubble {
   position: relative;
   max-width: 220px;

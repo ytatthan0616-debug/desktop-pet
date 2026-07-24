@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   onLanded: (callback) => {
     ipcRenderer.on('landed', () => callback());
   },
+  onTaskAction: (callback) => {
+    ipcRenderer.on('task-action', (_event, data) => callback(data));
+  },
   onSystemLoad: (callback) => {
     ipcRenderer.on('system-load', (_event, data) => callback(data));
   },

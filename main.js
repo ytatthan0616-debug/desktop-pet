@@ -19,6 +19,8 @@ const TICK_SECONDS = TICK_INTERVAL_MS / 1000;
 const IDLE_THRESHOLD_SECONDS = 90; // これ以上操作が無ければ「作業中」とみなさない
 const SAVE_INTERVAL_MS = 30000;
 const CHATTER_MIN_INTERVAL_MS = 45000; // アクティブウィンドウ検知によるセリフの最短間隔
+const TASK_ACTION_DURATION_MS = 10000; // タスク固有アクション(対象ウィンドウの近くで待機)の継続時間
+const TASK_ACTION_MIN_INTERVAL_MS = 30000; // 同じ分類のアクションを連発しないための最短間隔
 
 // --- 負荷(CPU/メモリ)による表情変化のしきい値(%) ---
 const LOAD_BUSY_THRESHOLD = 50;
@@ -36,6 +38,8 @@ let state = petState.loadState(STATE_FILE);
 let config = configStore.loadConfig();
 let lastActiveWindowKey = null;
 let lastChatterAt = 0;
+let lastActionAt = 0;
+let lastActionCategoryKey = null;
 let lastSaveTime = 0;
 let lastCommandedBounds = null;
 let prevCpuCores = os.cpus();
@@ -55,7 +59,7 @@ const wander = {
   y: 0,
   vy: 0, // 落下時の垂直速度
   direction: 1, // 1: 右へ, -1: 左へ
-  mode: 'idle', // 'idle' | 'walk' | 'dragging' | 'falling'
+  mode: 'idle', // 'idle' | 'walk' | 'dragging' | 'falling' | 'action'
   modeUntil: 0,
   lastMoveEventAt: 0,
   lastSentFacing: null,
@@ -204,6 +208,11 @@ function sendLanded() {
   mainWindow.webContents.send('landed');
 }
 
+function sendTaskAction(action) {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('task-action', { action });
+}
+
 function cpuTimesTotal(cores) {
   let idle = 0;
   let total = 0;
@@ -307,6 +316,17 @@ function wanderTick() {
     return;
   }
 
+  // タスク固有アクション中: 対象ウィンドウのそばで静止し、時間が来たら通常状態に戻す
+  if (wander.mode === 'action') {
+    if (now >= wander.modeUntil) {
+      wander.mode = 'idle';
+      wander.modeUntil = now + randRange(config.idleDurationMs);
+      sendTaskAction(null);
+    }
+    sendWalkState(false, 0);
+    return;
+  }
+
   // 通常の歩き回り(configで無効化されている場合は静止したまま)
   if (!config.wander) return;
   if (now >= wander.modeUntil) pickNextWanderMode(now);
@@ -346,6 +366,68 @@ function saveIfDue(force) {
   }
 }
 
+// category に固有アクションがあれば、同じ分類の開いているウィンドウの中から
+// 自分に一番近いものを探し、その近くまで移動してアクション状態にする。
+async function maybeStartTaskAction(activeWin, category) {
+  if (!mainWindow || !category) return;
+  const actionKey = speech.actionForCategory(category.key);
+  if (!actionKey) return;
+  if (wander.mode === 'dragging' || wander.mode === 'falling') return;
+
+  const now = Date.now();
+  if (actionKey === lastActionCategoryKey && now - lastActionAt < TASK_ACTION_MIN_INTERVAL_MS) return;
+
+  let openWindows;
+  try {
+    openWindows = await activeWin.getOpenWindows();
+  } catch (err) {
+    console.error('getOpenWindows failed:', err.message);
+    return;
+  }
+  if (!mainWindow) return;
+
+  const [winW, winH] = mainWindow.getSize();
+  const petCenterX = wander.x + winW / 2;
+  const petCenterY = wander.y + winH / 2;
+
+  let nearest = null;
+  let nearestDist = Infinity;
+  for (const win of openWindows) {
+    if (!win.bounds) continue;
+    const matched = speech.matchCategory(win.owner ? win.owner.name : '', win.title);
+    if (!matched || matched.key !== category.key) continue;
+    const cx = win.bounds.x + win.bounds.width / 2;
+    const cy = win.bounds.y + win.bounds.height / 2;
+    const dist = Math.hypot(cx - petCenterX, cy - petCenterY);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = win;
+    }
+  }
+  if (!nearest) return;
+
+  const display = screen.getDisplayNearestPoint({
+    x: Math.round(nearest.bounds.x + nearest.bounds.width / 2),
+    y: Math.round(nearest.bounds.y + nearest.bounds.height / 2),
+  });
+  const { minX, maxX } = getXBounds(display, winW);
+  const groundY = getGroundY(display, winH);
+  // 対象ウィンドウの右下付近を目指す(画面外に出ないようクランプ)
+  const targetX = Math.max(minX, Math.min(maxX, nearest.bounds.x + nearest.bounds.width - winW - 12));
+
+  wander.x = targetX;
+  wander.y = groundY;
+  wander.vy = 0;
+  wander.mode = 'action';
+  wander.modeUntil = now + TASK_ACTION_DURATION_MS;
+  lastActionAt = now;
+  lastActionCategoryKey = actionKey;
+
+  moveWindowTo(wander.x, wander.y, winW, winH);
+  sendWalkState(true, 0);
+  sendTaskAction(actionKey);
+}
+
 async function checkActiveWindow() {
   try {
     const activeWin = await import('active-win');
@@ -357,10 +439,12 @@ async function checkActiveWindow() {
     if (key !== lastActiveWindowKey) {
       lastActiveWindowKey = key;
       const now = Date.now();
+      const category = speech.matchCategory(owner, title);
       if (now - lastChatterAt >= CHATTER_MIN_INTERVAL_MS) {
         lastChatterAt = now;
         sendSpeech(speech.speechForWindow(owner, title));
       }
+      await maybeStartTaskAction(activeWin, category);
     }
   } catch (err) {
     // active-win はプラットフォームによっては権限が必要な場合がある。失敗しても致命的ではない。

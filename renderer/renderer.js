@@ -20,6 +20,14 @@ function createPetElement(isCompanion) {
   pet.appendChild(sprite);
   pet.appendChild(left);
   pet.appendChild(right);
+
+  // タスク固有アクション(ヘッドホン等)は自分自身(メインのペット)にだけ表示する
+  if (!isCompanion) {
+    const accessory = document.createElement('div');
+    accessory.className = 'accessory';
+    pet.appendChild(accessory);
+  }
+
   return pet;
 }
 
@@ -71,6 +79,14 @@ window.petAPI.onWalkState((data) => {
 
 window.petAPI.onSystemLoad((data) => {
   document.body.dataset.expression = data.expression || 'calm';
+});
+
+window.petAPI.onTaskAction((data) => {
+  if (data.action) {
+    document.body.dataset.action = data.action;
+  } else {
+    delete document.body.dataset.action;
+  }
 });
 
 window.petAPI.onLanded(() => {
