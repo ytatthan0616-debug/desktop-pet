@@ -4,6 +4,44 @@ const expFillEl = document.getElementById('exp-fill');
 
 let renderedCompanionCount = -1;
 let hideBubbleTimer = null;
+let enemyEl = null;
+
+// --- 子分の「わらわら」動き ---
+// 子分は一列に並ばず、主人のまわりをそれぞれ独立にふらふら漂う。
+// 目標位置をランダムに選び直しながらイージングで近づけることで、群れっぽさを出す。
+const SWARM_MAX_UP_PX = 26; // 上に浮く最大量
+const SWARM_MARGIN_PX = 22; // 左右の端に寄りすぎないための余白
+const SWARM_EASE = 0.05;
+const companionMotion = new WeakMap();
+
+function ensureCompanionMotion(el) {
+  let motion = companionMotion.get(el);
+  if (!motion) {
+    motion = { x: 0, y: 0, targetX: 0, targetY: 0, nextPickAt: 0 };
+    companionMotion.set(el, motion);
+  }
+  return motion;
+}
+
+function pickSwarmTarget(motion, now) {
+  const halfWidth = Math.max(0, petsEl.clientWidth / 2 - SWARM_MARGIN_PX);
+  motion.targetX = (Math.random() * 2 - 1) * halfWidth;
+  motion.targetY = -Math.random() * SWARM_MAX_UP_PX;
+  motion.nextPickAt = now + 800 + Math.random() * 1600;
+}
+
+function swarmTick(now) {
+  const companions = petsEl.querySelectorAll('.pet.companion');
+  companions.forEach((el) => {
+    const motion = ensureCompanionMotion(el);
+    if (now >= motion.nextPickAt) pickSwarmTarget(motion, now);
+    motion.x += (motion.targetX - motion.x) * SWARM_EASE;
+    motion.y += (motion.targetY - motion.y) * SWARM_EASE;
+    el.style.transform = `translate(${motion.x.toFixed(1)}px, ${motion.y.toFixed(1)}px)`;
+  });
+  requestAnimationFrame(swarmTick);
+}
+requestAnimationFrame(swarmTick);
 
 function createPetElement(isCompanion) {
   const pet = document.createElement('div');
@@ -40,6 +78,32 @@ function renderPets(companionCount) {
   for (let i = 0; i < companionCount; i++) {
     petsEl.appendChild(createPetElement(true));
   }
+}
+
+function spawnEnemy() {
+  if (enemyEl) return;
+  const enemy = document.createElement('div');
+  enemy.className = 'enemy';
+  const sprite = document.createElement('div');
+  sprite.className = 'enemy-sprite';
+  enemy.appendChild(sprite);
+  petsEl.appendChild(enemy);
+  enemyEl = enemy;
+  document.body.classList.add('battling');
+  // 追加直後は opacity:0 の状態なので、1フレーム後にクラスを付けて登場アニメーションさせる
+  requestAnimationFrame(() => {
+    if (enemyEl === enemy) enemy.classList.add('enemy-enter');
+  });
+}
+
+function clearEnemy() {
+  document.body.classList.remove('battling');
+  if (!enemyEl) return;
+  const el = enemyEl;
+  enemyEl = null;
+  el.classList.remove('enemy-enter');
+  el.classList.add('enemy-defeated');
+  setTimeout(() => el.remove(), 400);
 }
 
 function showSpeech(text) {
@@ -87,6 +151,14 @@ window.petAPI.onTaskAction((data) => {
   } else {
     delete document.body.dataset.action;
   }
+});
+
+window.petAPI.onEnemySpawn(() => {
+  spawnEnemy();
+});
+
+window.petAPI.onEnemyClear(() => {
+  clearEnemy();
 });
 
 window.petAPI.onLanded(() => {

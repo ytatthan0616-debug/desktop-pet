@@ -9,9 +9,10 @@ const STATE_FILE = path.join(app.getPath('userData'), 'pet-state.json');
 
 // --- レイアウト定数 ---
 const PET_SIZE = 64;
-const GAP = 14;
 const WINDOW_PADDING = 30; // セリフの吹き出し等がはみ出さないための余白
 const WINDOW_MARGIN_FROM_EDGE = 24;
+const SWARM_VERTICAL_ROOM = 34; // 子分が浮かんで動き回るための縦方向の余白(子分がいる時のみ加算)
+const ENEMY_SLOT_WIDTH = 60; // 敵(ウイルス)を表示するために追加するウィンドウ幅
 
 // --- 時間計測定数 ---
 const TICK_INTERVAL_MS = 5000; // メインループの間隔
@@ -21,6 +22,9 @@ const SAVE_INTERVAL_MS = 30000;
 const CHATTER_MIN_INTERVAL_MS = 45000; // アクティブウィンドウ検知によるセリフの最短間隔
 const TASK_ACTION_DURATION_MS = 10000; // タスク固有アクション(対象ウィンドウの近くで待機)の継続時間
 const TASK_ACTION_MIN_INTERVAL_MS = 30000; // 同じ分類のアクションを連発しないための最短間隔
+const ENEMY_MIN_INTERVAL_MS = 3 * 60 * 1000; // 敵が出現してから次に出現できるまでの最短間隔
+const ENEMY_AVG_INTERVAL_SECONDS = 300; // 平均的にこのくらいの間隔で出現するよう抽選確率を決める
+const ENEMY_BATTLE_DURATION_MS = 6000; // 戦闘演出の長さ
 
 // --- 負荷(CPU/メモリ)による表情変化のしきい値(%) ---
 const LOAD_BUSY_THRESHOLD = 50;
@@ -43,6 +47,9 @@ let lastActionCategoryKey = null;
 let lastSaveTime = 0;
 let lastCommandedBounds = null;
 let prevCpuCores = os.cpus();
+let battleActive = false;
+let battleTimeoutId = null;
+let lastEnemyAt = 0;
 
 function getGroundY(display, winH) {
   const work = display.workArea;
@@ -68,15 +75,18 @@ const wander = {
   lastSentHeight: 0,
 };
 
-function windowSizeForCompanions(companionCount) {
-  const petCount = 1 + companionCount;
-  const width = WINDOW_PADDING * 2 + PET_SIZE * petCount + GAP * (petCount - 1);
-  const height = WINDOW_PADDING * 2 + PET_SIZE + 40; // 40 = 吹き出し用の余白
+// 子分は一列に並ばず主人のまわりを自由に浮遊する(renderer側でランダムに位置を動かす)ので、
+// 子分の数に応じて「浮遊できる余白」をウィンドウに持たせる。戦闘中は敵の表示スペースも足す。
+function computeWindowSize(companionCount, isBattleActive) {
+  const swarmRadius = companionCount > 0 ? Math.min(130, 50 + companionCount * 11) : 0;
+  const enemyWidth = isBattleActive ? ENEMY_SLOT_WIDTH : 0;
+  const width = WINDOW_PADDING * 2 + PET_SIZE + swarmRadius * 2 + enemyWidth;
+  const height = WINDOW_PADDING * 2 + PET_SIZE + 40 + (companionCount > 0 ? SWARM_VERTICAL_ROOM : 0); // 40 = 吹き出し用の余白
   return { width: Math.round(width), height: Math.round(height) };
 }
 
 function createWindow() {
-  const { width, height } = windowSizeForCompanions(state.companions);
+  const { width, height } = computeWindowSize(state.companions, battleActive);
   const display = screen.getPrimaryDisplay();
   const { x: wx, y: wy, width: wW, height: wH } = display.workArea;
 
@@ -139,6 +149,10 @@ function createWindow() {
   // アクセスしてしまわないよう、破棄と同時にタイマーを止める。
   mainWindow.on('closed', () => {
     stopTimers();
+    if (battleTimeoutId) {
+      clearTimeout(battleTimeoutId);
+      battleTimeoutId = null;
+    }
     mainWindow = null;
   });
 }
@@ -161,9 +175,9 @@ function moveWindowTo(x, y, width, height) {
   mainWindow.setBounds({ x: lastCommandedBounds.x, y: lastCommandedBounds.y, width, height });
 }
 
-function resizeWindowForCompanions() {
+function resizeWindowForLayout() {
   if (!mainWindow) return;
-  const { width, height } = windowSizeForCompanions(state.companions);
+  const { width, height } = computeWindowSize(state.companions, battleActive);
   const [curX, curY] = mainWindow.getPosition();
   const [curW, curH] = mainWindow.getSize();
   // 右下を基準に、幅が増えた分だけ左に伸ばす
@@ -211,6 +225,16 @@ function sendLanded() {
 function sendTaskAction(action) {
   if (!mainWindow) return;
   mainWindow.webContents.send('task-action', { action });
+}
+
+function sendEnemySpawn() {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('enemy-spawn');
+}
+
+function sendEnemyClear() {
+  if (!mainWindow) return;
+  mainWindow.webContents.send('enemy-clear');
 }
 
 function cpuTimesTotal(cores) {
@@ -428,6 +452,35 @@ async function maybeStartTaskAction(activeWin, category) {
   sendTaskAction(actionKey);
 }
 
+// たまにウイルスっぽい敵を出現させ、少しの間ペットたちに「戦わせる」演出をする。
+// ゲーム的な報酬などは無く、見た目だけの一発イベント。
+function maybeSpawnEnemy(now) {
+  if (battleActive) return;
+  if (wander.mode === 'dragging' || wander.mode === 'falling') return;
+  if (now - lastEnemyAt < ENEMY_MIN_INTERVAL_MS) return;
+  if (Math.random() > TICK_SECONDS / ENEMY_AVG_INTERVAL_SECONDS) return;
+  startEnemyBattle(now);
+}
+
+function startEnemyBattle(now) {
+  if (!mainWindow) return;
+  battleActive = true;
+  lastEnemyAt = now;
+  resizeWindowForLayout();
+  sendSpeech(speech.speechForEnemyAppear());
+  sendEnemySpawn();
+  if (battleTimeoutId) clearTimeout(battleTimeoutId);
+  battleTimeoutId = setTimeout(endEnemyBattle, ENEMY_BATTLE_DURATION_MS);
+}
+
+function endEnemyBattle() {
+  battleTimeoutId = null;
+  battleActive = false;
+  sendEnemyClear();
+  sendSpeech(speech.speechForEnemyDefeated());
+  resizeWindowForLayout();
+}
+
 async function checkActiveWindow() {
   try {
     const activeWin = await import('active-win');
@@ -461,13 +514,14 @@ function tick() {
     const { leveledUp, gainedCompanion } = petState.addActiveSeconds(state, TICK_SECONDS);
 
     if (gainedCompanion) {
-      resizeWindowForCompanions();
+      resizeWindowForLayout();
       sendSpeech(speech.speechForCompanion(state.companions));
     } else if (leveledUp) {
       sendSpeech(speech.speechForLevelUp(state.level));
     }
 
     checkActiveWindow();
+    maybeSpawnEnemy(Date.now());
   }
 
   sendState();
@@ -513,7 +567,7 @@ function buildContextMenu() {
       click: () => {
         state = petState.defaultState();
         petState.saveState(STATE_FILE, state);
-        resizeWindowForCompanions();
+        resizeWindowForLayout();
         sendState();
       },
     },
@@ -559,7 +613,7 @@ ipcMain.on('pet:quit', () => {
 ipcMain.on('pet:reset', () => {
   state = petState.defaultState();
   petState.saveState(STATE_FILE, state);
-  resizeWindowForCompanions();
+  resizeWindowForLayout();
   sendState();
 });
 

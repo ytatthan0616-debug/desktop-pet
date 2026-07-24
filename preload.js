@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('petAPI', {
   onTaskAction: (callback) => {
     ipcRenderer.on('task-action', (_event, data) => callback(data));
   },
+  onEnemySpawn: (callback) => {
+    ipcRenderer.on('enemy-spawn', () => callback());
+  },
+  onEnemyClear: (callback) => {
+    ipcRenderer.on('enemy-clear', () => callback());
+  },
   onSystemLoad: (callback) => {
     ipcRenderer.on('system-load', (_event, data) => callback(data));
   },

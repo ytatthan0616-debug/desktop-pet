@@ -73,6 +73,10 @@ const DEFAULT_LINES = ['がんばえー', '今日も一日おつかれさま', '
 
 const IDLE_LINES = ['あれ、どこ行った…？', 'ねむいなあ', 'そろそろ戻ってきてね'];
 
+const ENEMY_APPEAR_LINES = ['ウイルスが出た!みんな構えて!', '敵だ!やっつけよう!', '怪しいのが近づいてきた…!'];
+
+const ENEMY_DEFEATED_LINES = ['やっつけた!', 'みんなのおかげだよ', 'もう安心!'];
+
 function pickLine(lines) {
   return lines[Math.floor(Math.random() * lines.length)];
 }
@@ -106,6 +110,14 @@ function speechForCompanion(companions) {
   return `子分が増えた！ (計${companions}匹)`;
 }
 
+function speechForEnemyAppear() {
+  return pickLine(ENEMY_APPEAR_LINES);
+}
+
+function speechForEnemyDefeated() {
+  return pickLine(ENEMY_DEFEATED_LINES);
+}
+
 module.exports = {
   matchCategory,
   actionForCategory,
@@ -113,4 +125,6 @@ module.exports = {
   speechForIdle,
   speechForLevelUp,
   speechForCompanion,
+  speechForEnemyAppear,
+  speechForEnemyDefeated,
 };

@@ -26,27 +26,36 @@ body {
   -webkit-app-region: drag;
 }
 
+/* 子分は一列に整列させず主人の足元を基準にそれぞれ独立に浮遊させる(renderer.jsがtransformで散らす)ので、
+   flexの並びではなく絶対配置の座標空間にする。overflow:visibleで浮遊時のはみ出しを許可する。 */
 #pets {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
+  position: relative;
+  width: 100%;
+  height: 64px;
+  overflow: visible;
 }
 
 .pet {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
   width: 64px;
   height: 64px;
   background: #ffffff;
   border: 2px solid #333333;
   border-radius: 10px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  flex-shrink: 0;
   transform-origin: bottom center;
+}
+
+.pet.main {
+  margin-left: -32px; /* 自身の幅の半分だけ左にずらして中央基準にする */
 }
 
 .pet.companion {
   width: 40px;
   height: 40px;
+  margin-left: -20px; /* 自身の幅の半分。実際の散らばりはrenderer.jsのtransformで加える */
   border-radius: 8px;
   opacity: 0.92;
 }
@@ -334,10 +343,10 @@ body[data-action='study'] .pet.main .accessory::after {
   transform: rotate(6deg);
 }
 
-/* タイマー: 頭上に浮かぶ時計。針が回って計測中を表す */
+/* タイマー: 体の横に浮かぶ時計。針が回って計測中を表す(吹き出し/経験値バーと重ならないよう頭上ではなく横に配置) */
 body[data-action='timer'] .pet.main .accessory {
-  top: -22px;
-  left: 20px;
+  top: 8px;
+  left: 46px;
   width: 24px;
   height: 24px;
 }
@@ -371,6 +380,70 @@ body[data-action='timer'] .pet.main .accessory::after {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* --- 敵(ウイルス)出現イベント(main.jsがたまに発生させ、enemy-spawn/enemy-clear で通知する) ---
+   戦闘中はペット全員が敵に向かって突撃するような揺れアニメーションになる。 */
+body.battling .pet.main,
+body.battling .pet.companion {
+  animation: pet-attack 0.45s ease-in-out infinite;
+}
+
+@keyframes pet-attack {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+.enemy {
+  position: absolute;
+  right: -6px;
+  bottom: 0;
+  width: 40px;
+  height: 40px;
+  opacity: 0;
+  transform: translateX(24px) scale(0.6);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+  pointer-events: none;
+}
+
+.enemy.enemy-enter {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  animation: enemy-float 1.3s ease-in-out infinite;
+}
+
+.enemy.enemy-defeated {
+  opacity: 0;
+  transform: translateX(10px) scale(0.2) rotate(30deg);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+  animation: none;
+}
+
+@keyframes enemy-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.enemy-sprite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 2px;
 }
 
 #speech-bubble {
@@ -848,4 +921,141 @@ body[data-skin='girl'] .pixel-sprite {
     36px 36px 0 0 #f7d9c4,
     40px 36px 0 0 #f7d9c4,
     44px 36px 0 0 #5b3a29;
+}
+
+/* --- 敵(ウイルス)のドット絵(scripts/gen-sprites.js相当のロジックで生成) --- */
+.enemy-sprite {
+  box-shadow:
+    20px 2px 0 0 #e6d3ff,
+    8px 4px 0 0 #e6d3ff,
+    20px 4px 0 0 #7c4dcf,
+    30px 4px 0 0 #e6d3ff,
+    10px 8px 0 0 #7c4dcf,
+    16px 8px 0 0 #9b6fe0,
+    18px 8px 0 0 #9b6fe0,
+    20px 8px 0 0 #9b6fe0,
+    22px 8px 0 0 #9b6fe0,
+    28px 8px 0 0 #7c4dcf,
+    12px 10px 0 0 #9b6fe0,
+    14px 10px 0 0 #9b6fe0,
+    16px 10px 0 0 #9b6fe0,
+    18px 10px 0 0 #9b6fe0,
+    20px 10px 0 0 #9b6fe0,
+    22px 10px 0 0 #9b6fe0,
+    24px 10px 0 0 #7c4dcf,
+    26px 10px 0 0 #7c4dcf,
+    10px 12px 0 0 #9b6fe0,
+    12px 12px 0 0 #9b6fe0,
+    14px 12px 0 0 #9b6fe0,
+    16px 12px 0 0 #9b6fe0,
+    18px 12px 0 0 #9b6fe0,
+    20px 12px 0 0 #9b6fe0,
+    22px 12px 0 0 #7c4dcf,
+    24px 12px 0 0 #7c4dcf,
+    26px 12px 0 0 #7c4dcf,
+    28px 12px 0 0 #7c4dcf,
+    2px 14px 0 0 #e6d3ff,
+    4px 14px 0 0 #7c4dcf,
+    10px 14px 0 0 #9b6fe0,
+    12px 14px 0 0 #9b6fe0,
+    14px 14px 0 0 #9b6fe0,
+    16px 14px 0 0 #9b6fe0,
+    18px 14px 0 0 #9b6fe0,
+    20px 14px 0 0 #7c4dcf,
+    22px 14px 0 0 #7c4dcf,
+    24px 14px 0 0 #7c4dcf,
+    26px 14px 0 0 #7c4dcf,
+    28px 14px 0 0 #7c4dcf,
+    34px 14px 0 0 #7c4dcf,
+    36px 14px 0 0 #e6d3ff,
+    8px 16px 0 0 #9b6fe0,
+    10px 16px 0 0 #9b6fe0,
+    12px 16px 0 0 #9b6fe0,
+    14px 16px 0 0 #9b6fe0,
+    16px 16px 0 0 #9b6fe0,
+    18px 16px 0 0 #7c4dcf,
+    20px 16px 0 0 #7c4dcf,
+    22px 16px 0 0 #7c4dcf,
+    24px 16px 0 0 #7c4dcf,
+    26px 16px 0 0 #7c4dcf,
+    28px 16px 0 0 #7c4dcf,
+    30px 16px 0 0 #5b2f8a,
+    8px 18px 0 0 #9b6fe0,
+    10px 18px 0 0 #9b6fe0,
+    12px 18px 0 0 #9b6fe0,
+    14px 18px 0 0 #20102e,
+    16px 18px 0 0 #7c4dcf,
+    18px 18px 0 0 #7c4dcf,
+    20px 18px 0 0 #7c4dcf,
+    22px 18px 0 0 #7c4dcf,
+    24px 18px 0 0 #20102e,
+    26px 18px 0 0 #7c4dcf,
+    28px 18px 0 0 #5b2f8a,
+    30px 18px 0 0 #5b2f8a,
+    8px 20px 0 0 #9b6fe0,
+    10px 20px 0 0 #9b6fe0,
+    12px 20px 0 0 #9b6fe0,
+    14px 20px 0 0 #20102e,
+    16px 20px 0 0 #7c4dcf,
+    18px 20px 0 0 #7c4dcf,
+    20px 20px 0 0 #7c4dcf,
+    22px 20px 0 0 #7c4dcf,
+    24px 20px 0 0 #20102e,
+    26px 20px 0 0 #5b2f8a,
+    28px 20px 0 0 #5b2f8a,
+    30px 20px 0 0 #5b2f8a,
+    8px 22px 0 0 #9b6fe0,
+    10px 22px 0 0 #9b6fe0,
+    12px 22px 0 0 #7c4dcf,
+    14px 22px 0 0 #7c4dcf,
+    16px 22px 0 0 #7c4dcf,
+    18px 22px 0 0 #7c4dcf,
+    20px 22px 0 0 #7c4dcf,
+    22px 22px 0 0 #7c4dcf,
+    24px 22px 0 0 #5b2f8a,
+    26px 22px 0 0 #5b2f8a,
+    28px 22px 0 0 #5b2f8a,
+    30px 22px 0 0 #5b2f8a,
+    2px 24px 0 0 #e6d3ff,
+    4px 24px 0 0 #7c4dcf,
+    10px 24px 0 0 #7c4dcf,
+    12px 24px 0 0 #7c4dcf,
+    14px 24px 0 0 #7c4dcf,
+    16px 24px 0 0 #7c4dcf,
+    18px 24px 0 0 #7c4dcf,
+    20px 24px 0 0 #7c4dcf,
+    22px 24px 0 0 #5b2f8a,
+    24px 24px 0 0 #5b2f8a,
+    26px 24px 0 0 #5b2f8a,
+    28px 24px 0 0 #5b2f8a,
+    34px 24px 0 0 #7c4dcf,
+    36px 24px 0 0 #e6d3ff,
+    10px 26px 0 0 #7c4dcf,
+    12px 26px 0 0 #7c4dcf,
+    14px 26px 0 0 #7c4dcf,
+    16px 26px 0 0 #20102e,
+    18px 26px 0 0 #20102e,
+    20px 26px 0 0 #20102e,
+    22px 26px 0 0 #20102e,
+    24px 26px 0 0 #5b2f8a,
+    26px 26px 0 0 #5b2f8a,
+    28px 26px 0 0 #5b2f8a,
+    12px 28px 0 0 #7c4dcf,
+    14px 28px 0 0 #7c4dcf,
+    16px 28px 0 0 #7c4dcf,
+    18px 28px 0 0 #5b2f8a,
+    20px 28px 0 0 #5b2f8a,
+    22px 28px 0 0 #5b2f8a,
+    24px 28px 0 0 #5b2f8a,
+    26px 28px 0 0 #5b2f8a,
+    10px 30px 0 0 #7c4dcf,
+    16px 30px 0 0 #5b2f8a,
+    18px 30px 0 0 #5b2f8a,
+    20px 30px 0 0 #5b2f8a,
+    22px 30px 0 0 #5b2f8a,
+    28px 30px 0 0 #7c4dcf,
+    8px 34px 0 0 #e6d3ff,
+    20px 34px 0 0 #7c4dcf,
+    30px 34px 0 0 #e6d3ff,
+    20px 38px 0 0 #e6d3ff;
 }
