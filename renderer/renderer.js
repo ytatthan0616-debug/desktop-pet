@@ -48,7 +48,7 @@ function showSpeech(text) {
   if (hideBubbleTimer) clearTimeout(hideBubbleTimer);
   hideBubbleTimer = setTimeout(() => {
     bubbleEl.classList.add('hidden');
-  }, 4500);
+  }, 7000);
 }
 
 window.petAPI.onState((data) => {

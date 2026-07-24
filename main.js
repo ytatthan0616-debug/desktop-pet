@@ -12,11 +12,13 @@ const PET_SIZE = 64;
 const WINDOW_PADDING = 30; // セリフの吹き出し等がはみ出さないための余白
 const WINDOW_MARGIN_FROM_EDGE = 24;
 const ITEM_WINDOW_SIZE = 56; // 敵/コイン/骨を表示する別ウィンドウの一辺
-const COMPANION_SIZE = 40; // 子分を表示する別ウィンドウの一辺
-const COMPANION_HOVER_RADIUS = 46; // 主人からどれだけ左右に離れて漂うか
-const COMPANION_EASE = 0.08;
-const COMPANION_PICK_MIN_MS = 700;
-const COMPANION_PICK_MAX_MS = 1900;
+const COMPANION_SIZE = 40; // 子分の見た目のサイズ(幅・跳ねる前の高さ)
+const COMPANION_WINDOW_HEIGHT = 56; // 跳ねた時に見切れないよう縦だけ余裕を持たせたウィンドウの高さ
+const COMPANION_ROAM_RADIUS = 60; // 自分の持ち場からどれだけ左右に離れて漂うか
+const COMPANION_EASE = 0.1;
+const COMPANION_TICK_MS = 300; // 子分専用の更新間隔(主人のwanderTickより緩くして軽量化する)
+const COMPANION_PICK_MIN_MS = 900;
+const COMPANION_PICK_MAX_MS = 2400;
 
 // --- 時間計測定数 ---
 const TICK_INTERVAL_MS = 5000; // メインループの間隔
@@ -26,11 +28,11 @@ const SAVE_INTERVAL_MS = 30000;
 const CHATTER_MIN_INTERVAL_MS = 45000; // アクティブウィンドウ検知によるセリフの最短間隔
 const TASK_ACTION_DURATION_MS = 10000; // タスク固有アクション(対象ウィンドウの近くで待機)の継続時間
 const TASK_ACTION_MIN_INTERVAL_MS = 30000; // 同じ分類のアクションを連発しないための最短間隔
-const ENEMY_MIN_INTERVAL_MS = 3 * 60 * 1000; // 敵が出現してから次に出現できるまでの最短間隔
-const ENEMY_AVG_INTERVAL_SECONDS = 300; // 平均的にこのくらいの間隔で出現するよう抽選確率を決める
+const ENEMY_MIN_INTERVAL_MS = 90 * 1000; // 敵が出現してから次に出現できるまでの最短間隔
+const ENEMY_AVG_INTERVAL_SECONDS = 150; // 平均的にこのくらいの間隔で出現するよう抽選確率を決める
 const ENEMY_BATTLE_DURATION_MS = 6000; // 戦闘演出の長さ
-const LOOT_MIN_INTERVAL_MS = 2 * 60 * 1000; // コイン/骨が出てから次に出現できるまでの最短間隔
-const LOOT_AVG_INTERVAL_SECONDS = 240; // 平均的にこのくらいの間隔で出現するよう抽選確率を決める
+const LOOT_MIN_INTERVAL_MS = 45 * 1000; // コイン/骨が出てから次に出現できるまでの最短間隔
+const LOOT_AVG_INTERVAL_SECONDS = 90; // 平均的にこのくらいの間隔で出現するよう抽選確率を決める
 const LOOT_DURATION_MS = 5000; // 拾って食べる演出の長さ
 const SLEEP_THRESHOLD_SECONDS = 5 * 60; // これ以上操作が無ければ寝る
 
@@ -54,6 +56,7 @@ const MOVING_LIKE_MODES = new Set(['walk', 'run', 'jump', 'roll', 'seek']);
 let mainWindow = null;
 let tickIntervalId = null;
 let wanderIntervalId = null;
+let companionIntervalId = null;
 let state = petState.loadState(STATE_FILE);
 let config = configStore.loadConfig();
 let lastActiveWindowKey = null;
@@ -179,6 +182,7 @@ function createWindow() {
   // アクセスしてしまわないよう、破棄と同時にタイマーを止める。
   mainWindow.on('closed', () => {
     stopTimers();
+    stopCompanionTimer();
     closeItemWindow(false);
     closeAllCompanionWindows();
     mainWindow = null;
@@ -203,16 +207,23 @@ function moveWindowTo(x, y, width, height) {
   mainWindow.setBounds({ x: lastCommandedBounds.x, y: lastCommandedBounds.y, width, height });
 }
 
-// 子分は主人とは別の小さな透明ウィンドウとして持たせ、主人の現在地の周りを
-// それぞれ独立にふらふらと漂う(main.jsが毎tick位置を計算してsetBoundsする)。
-// 同じウィンドウ内でCSSアニメーションとJSのtransformが競合して瞬間的に
-// 位置がおかしくなる問題が繰り返し起きたため、ウィンドウごと分離して解決している。
+// 子分は主人とは別の小さな透明ウィンドウとして持たせる。別ウィンドウである以上は
+// 主人とは切り離して考え、追いかけたりドラッグ中に集まったりはせず、生まれた場所の
+// 近くで勝手に跳ねて遊んでいるだけにする(セリフも喋らない)。
+// 主人のwanderTick(50ms)より緩い専用タイマー(COMPANION_TICK_MS)で動かして軽量化している。
 function createCompanionWindow() {
+  const [, winH] = mainWindow ? mainWindow.getSize() : [PET_SIZE, PET_SIZE];
+  const groundY = wander.y + winH - 24; // 主人の足元あたり(生まれる場所の参照。以降は完全に独立する)
+  const display = screen.getDisplayNearestPoint({ x: Math.round(wander.x), y: Math.round(groundY) });
+  const { minX, maxX } = getXBounds(display, COMPANION_SIZE);
+  const homeX = Math.max(minX, Math.min(maxX, Math.round(wander.x + (Math.random() * 160 - 80))));
+  const homeY = Math.round(groundY) - (COMPANION_WINDOW_HEIGHT - COMPANION_SIZE);
+
   const win = new BrowserWindow({
     width: COMPANION_SIZE,
-    height: COMPANION_SIZE,
-    x: Math.round(wander.x),
-    y: Math.round(wander.y),
+    height: COMPANION_WINDOW_HEIGHT,
+    x: homeX,
+    y: homeY,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
@@ -227,7 +238,7 @@ function createCompanionWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'companion.html'), {
     query: { color: state.color, skin: state.skin },
   });
-  return { win, offsetX: 0, targetOffsetX: 0, nextPickAt: 0, lastFacing: null };
+  return { win, homeX, homeY, offsetX: 0, targetOffsetX: 0, nextPickAt: 0, lastFacing: null };
 }
 
 // state.companionsの数に合わせて子分ウィンドウを増減させる。
@@ -260,30 +271,23 @@ function updateCompanionSkin() {
   }
 }
 
-// 毎tick、主人の現在地を基準に子分ウィンドウの位置を更新する。
-// ドラッグ中/就寝中は主人の足元に寄って大人しくなり、それ以外は主人が
-// 何をしていようと(歩く/走る/跳ぶ/転がる/止まる)常に独立してふらふら動き続ける。
-function updateCompanionPositions(now) {
-  if (!companions.length || !mainWindow) return;
-  const [winW, winH] = mainWindow.getSize();
-  const anchorX = wander.x + winW / 2;
-  const anchorY = wander.y + winH - 24;
-  const settle = wander.mode === 'dragging' || isSleeping;
-  const facing = wander.direction >= 0 ? 'right' : 'left';
+// 主人とは無関係に、自分の持ち場(homeX)の左右をふらふら漂うだけの軽い処理。
+function companionsTick() {
+  if (!companions.length) return;
+  const now = Date.now();
 
   for (const c of companions) {
-    if (settle) {
-      c.targetOffsetX = 0;
-    } else if (now >= c.nextPickAt) {
-      c.targetOffsetX = (Math.random() * 2 - 1) * COMPANION_HOVER_RADIUS;
+    if (c.win.isDestroyed()) continue;
+
+    if (now >= c.nextPickAt) {
+      c.targetOffsetX = (Math.random() * 2 - 1) * COMPANION_ROAM_RADIUS;
       c.nextPickAt = now + COMPANION_PICK_MIN_MS + Math.random() * (COMPANION_PICK_MAX_MS - COMPANION_PICK_MIN_MS);
     }
+    const facing = c.targetOffsetX >= c.offsetX ? 'right' : 'left';
     c.offsetX += (c.targetOffsetX - c.offsetX) * COMPANION_EASE;
 
-    if (c.win.isDestroyed()) continue;
-    const x = Math.round(anchorX + c.offsetX - COMPANION_SIZE / 2);
-    const y = Math.round(anchorY - COMPANION_SIZE / 2);
-    c.win.setBounds({ x, y, width: COMPANION_SIZE, height: COMPANION_SIZE });
+    const x = Math.round(c.homeX + c.offsetX);
+    c.win.setBounds({ x, y: c.homeY, width: COMPANION_SIZE, height: COMPANION_WINDOW_HEIGHT });
 
     if (c.lastFacing !== facing) {
       c.lastFacing = facing;
@@ -292,6 +296,16 @@ function updateCompanionPositions(now) {
         .catch(() => {});
     }
   }
+}
+
+function startCompanionTimer() {
+  if (companionIntervalId) clearInterval(companionIntervalId);
+  companionIntervalId = setInterval(companionsTick, COMPANION_TICK_MS);
+}
+
+function stopCompanionTimer() {
+  if (companionIntervalId) clearInterval(companionIntervalId);
+  companionIntervalId = null;
 }
 
 // 敵(ウイルス)/コイン/骨を、ペットのウィンドウとは別の透明ウィンドウとして
@@ -536,10 +550,6 @@ function pickNextWanderMode(now) {
 function wanderTick() {
   if (!mainWindow) return;
   const now = Date.now();
-
-  // 子分は主人が今どんな状態(歩く/走る/跳ぶ/転がる/止まる)であっても、
-  // それに関係なく常に独立してふらふら動き続ける(1tick=前回分の主人の位置を基準)。
-  updateCompanionPositions(now);
 
   const [winW, winH] = mainWindow.getSize();
   // ドラッグ中に別のモニターへ移動している場合があるため、現在位置に
@@ -895,6 +905,7 @@ app.whenReady().then(() => {
   createWindow();
   syncCompanionWindows();
   startTimers();
+  startCompanionTimer();
 
   configStore.watchConfig((newConfig) => {
     config = newConfig;
@@ -906,6 +917,7 @@ app.whenReady().then(() => {
       createWindow();
       syncCompanionWindows();
       startTimers();
+      startCompanionTimer();
     }
   });
 });
