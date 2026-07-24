@@ -384,8 +384,10 @@ body[data-action='timer'] .pet.main .accessory::after {
 
 /* --- 敵(ウイルス)出現イベント(main.jsがたまに発生させ、enemy-spawn/enemy-clear で通知する) ---
    戦闘中はペット全員が敵に向かって突撃するような揺れアニメーションになる。 */
-body.battling .pet.main,
-body.battling .pet.companion {
+/* 子分はswarmTick(renderer.js)が毎フレームtransformを書き換えて散らばせているため、
+   ここでアニメーションさせると上書きされて中央に固まって見えなくなる。主人だけ突撃させ、
+   子分側の震えはrenderer.js側でtransformに合成する。 */
+body.battling .pet.main {
   animation: pet-attack 0.45s ease-in-out infinite;
 }
 

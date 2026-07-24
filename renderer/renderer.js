@@ -31,13 +31,19 @@ function pickSwarmTarget(motion, now) {
 }
 
 function swarmTick(now) {
+  // 戦闘中は主人が pet-attack アニメーションで突撃するが、子分はCSSアニメーションを
+  // 使わず(使うとこのtransformが上書きされ中央に固まって見えてしまうため)、
+  // ここで震えを合成することで散らばった位置を保ったまま反応させる。
+  const battling = document.body.classList.contains('battling');
+  const attackJitter = battling ? Math.sin(now / 90) * 6 : 0;
+
   const companions = petsEl.querySelectorAll('.pet.companion');
   companions.forEach((el) => {
     const motion = ensureCompanionMotion(el);
     if (now >= motion.nextPickAt) pickSwarmTarget(motion, now);
     motion.x += (motion.targetX - motion.x) * SWARM_EASE;
     motion.y += (motion.targetY - motion.y) * SWARM_EASE;
-    el.style.transform = `translate(${motion.x.toFixed(1)}px, ${motion.y.toFixed(1)}px)`;
+    el.style.transform = `translate(${(motion.x + attackJitter).toFixed(1)}px, ${motion.y.toFixed(1)}px)`;
   });
   requestAnimationFrame(swarmTick);
 }
