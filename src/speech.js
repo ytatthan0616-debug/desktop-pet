@@ -77,6 +77,10 @@ const ENEMY_APPEAR_LINES = ['ウイルスが出た!みんな構えて!', '敵だ
 
 const ENEMY_DEFEATED_LINES = ['やっつけた!', 'みんなのおかげだよ', 'もう安心!'];
 
+const LOOT_COIN_LINES = ['コインを見つけた!', 'ラッキー、コインだ!', '拾っておこう'];
+
+const LOOT_BONE_LINES = ['骨付き肉だ、いただきます!', 'おいしそう!', 'んー、おいしい!'];
+
 function pickLine(lines) {
   return lines[Math.floor(Math.random() * lines.length)];
 }
@@ -118,6 +122,10 @@ function speechForEnemyDefeated() {
   return pickLine(ENEMY_DEFEATED_LINES);
 }
 
+function speechForLootFound(kind) {
+  return pickLine(kind === 'coin' ? LOOT_COIN_LINES : LOOT_BONE_LINES);
+}
+
 module.exports = {
   matchCategory,
   actionForCategory,
@@ -127,4 +135,5 @@ module.exports = {
   speechForCompanion,
   speechForEnemyAppear,
   speechForEnemyDefeated,
+  speechForLootFound,
 };

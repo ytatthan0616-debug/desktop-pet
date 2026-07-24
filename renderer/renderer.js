@@ -5,29 +5,36 @@ const expFillEl = document.getElementById('exp-fill');
 let renderedCompanionCount = -1;
 let hideBubbleTimer = null;
 let enemyEl = null;
+let lootEl = null;
 
 // --- 子分の「わらわら」動き ---
-// 子分は一列に並ばず、主人のまわりをそれぞれ独立にふらふら漂う。
-// 目標位置をランダムに選び直しながらイージングで近づけることで、群れっぽさを出す。
-const SWARM_MAX_UP_PX = 26; // 上に浮く最大量
+// 子分は一列に並ばず、主人のまわりをそれぞれ独立に地面を跳ねながら動き回る。
+// 横方向はランダムな目標位置へイージングで近づき、縦方向は常に地面(0)を基準に
+// 跳ねる弧を描くことで「ぴょんぴょん」した見た目にする。
 const SWARM_MARGIN_PX = 22; // 左右の端に寄りすぎないための余白
-const SWARM_EASE = 0.05;
+const SWARM_EASE = 0.06;
+const HOP_HEIGHT_PX = 10; // 跳ねる高さ
 const companionMotion = new WeakMap();
 
 function ensureCompanionMotion(el) {
   let motion = companionMotion.get(el);
   if (!motion) {
-    motion = { x: 0, y: 0, targetX: 0, targetY: 0, nextPickAt: 0 };
+    motion = {
+      x: 0,
+      targetX: 0,
+      nextPickAt: 0,
+      hopPeriodMs: 460 + Math.random() * 260,
+      hopPhase: Math.random() * 1000,
+    };
     companionMotion.set(el, motion);
   }
   return motion;
 }
 
-function pickSwarmTarget(motion, now) {
+function pickSwarmTargetX(motion, now) {
   const halfWidth = Math.max(0, petsEl.clientWidth / 2 - SWARM_MARGIN_PX);
   motion.targetX = (Math.random() * 2 - 1) * halfWidth;
-  motion.targetY = -Math.random() * SWARM_MAX_UP_PX;
-  motion.nextPickAt = now + 800 + Math.random() * 1600;
+  motion.nextPickAt = now + 700 + Math.random() * 1200;
 }
 
 function swarmTick(now) {
@@ -36,14 +43,27 @@ function swarmTick(now) {
   // ここで震えを合成することで散らばった位置を保ったまま反応させる。
   const battling = document.body.classList.contains('battling');
   const attackJitter = battling ? Math.sin(now / 90) * 6 : 0;
+  // ドラッグ中・就寝中は主人の足元に引き寄せられて大人しくなる
+  const settle = document.body.classList.contains('dragging') || document.body.classList.contains('sleeping');
 
   const companions = petsEl.querySelectorAll('.pet.companion');
   companions.forEach((el) => {
     const motion = ensureCompanionMotion(el);
-    if (now >= motion.nextPickAt) pickSwarmTarget(motion, now);
+
+    if (settle) {
+      motion.targetX = 0;
+      motion.x += (motion.targetX - motion.x) * SWARM_EASE;
+      el.style.transform = `translate(${motion.x.toFixed(1)}px, 0px)`;
+      return;
+    }
+
+    if (now >= motion.nextPickAt) pickSwarmTargetX(motion, now);
     motion.x += (motion.targetX - motion.x) * SWARM_EASE;
-    motion.y += (motion.targetY - motion.y) * SWARM_EASE;
-    el.style.transform = `translate(${(motion.x + attackJitter).toFixed(1)}px, ${motion.y.toFixed(1)}px)`;
+
+    const hopT = ((now - motion.hopPhase) % motion.hopPeriodMs) / motion.hopPeriodMs;
+    const hopY = -HOP_HEIGHT_PX * Math.sin(hopT * Math.PI);
+
+    el.style.transform = `translate(${(motion.x + attackJitter).toFixed(1)}px, ${hopY.toFixed(1)}px)`;
   });
   requestAnimationFrame(swarmTick);
 }
@@ -65,11 +85,16 @@ function createPetElement(isCompanion) {
   pet.appendChild(left);
   pet.appendChild(right);
 
-  // タスク固有アクション(ヘッドホン等)は自分自身(メインのペット)にだけ表示する
+  // タスク固有アクション(ヘッドホン等)・就寝中のZZZは自分自身(メインのペット)にだけ表示する
   if (!isCompanion) {
     const accessory = document.createElement('div');
     accessory.className = 'accessory';
     pet.appendChild(accessory);
+
+    const zzz = document.createElement('div');
+    zzz.className = 'zzz';
+    zzz.innerHTML = '<span>Z</span><span>Z</span><span>Z</span>';
+    pet.appendChild(zzz);
   }
 
   return pet;
@@ -112,6 +137,28 @@ function clearEnemy() {
   setTimeout(() => el.remove(), 400);
 }
 
+function spawnLoot(kind) {
+  if (lootEl) return;
+  const loot = document.createElement('div');
+  loot.className = `loot ${kind}`;
+  petsEl.appendChild(loot);
+  lootEl = loot;
+  document.body.classList.add('looting');
+  requestAnimationFrame(() => {
+    if (lootEl === loot) loot.classList.add('loot-enter');
+  });
+}
+
+function clearLoot() {
+  document.body.classList.remove('looting');
+  if (!lootEl) return;
+  const el = lootEl;
+  lootEl = null;
+  el.classList.remove('loot-enter');
+  el.classList.add('loot-cleared');
+  setTimeout(() => el.remove(), 400);
+}
+
 function showSpeech(text) {
   bubbleEl.textContent = text;
   bubbleEl.classList.remove('hidden');
@@ -137,6 +184,7 @@ window.petAPI.onSpeech((data) => {
 window.petAPI.onWalkState((data) => {
   document.body.classList.toggle('walking', !!data.walking);
   document.body.classList.toggle('falling', !!data.falling);
+  document.body.classList.toggle('dragging', !!data.dragging);
   document.body.classList.toggle('facing-left', data.facing === 'left');
   document.body.classList.toggle('facing-right', data.facing === 'right');
 
@@ -165,6 +213,18 @@ window.petAPI.onEnemySpawn(() => {
 
 window.petAPI.onEnemyClear(() => {
   clearEnemy();
+});
+
+window.petAPI.onSleepState((data) => {
+  document.body.classList.toggle('sleeping', !!data.sleeping);
+});
+
+window.petAPI.onLootSpawn((data) => {
+  spawnLoot(data.kind);
+});
+
+window.petAPI.onLootClear(() => {
+  clearLoot();
 });
 
 window.petAPI.onLanded(() => {

@@ -22,6 +22,15 @@ contextBridge.exposeInMainWorld('petAPI', {
   onEnemyClear: (callback) => {
     ipcRenderer.on('enemy-clear', () => callback());
   },
+  onSleepState: (callback) => {
+    ipcRenderer.on('sleep-state', (_event, data) => callback(data));
+  },
+  onLootSpawn: (callback) => {
+    ipcRenderer.on('loot-spawn', (_event, data) => callback(data));
+  },
+  onLootClear: (callback) => {
+    ipcRenderer.on('loot-clear', () => callback());
+  },
   onSystemLoad: (callback) => {
     ipcRenderer.on('system-load', (_event, data) => callback(data));
   },

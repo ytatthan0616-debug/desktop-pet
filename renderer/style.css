@@ -26,8 +26,8 @@ body {
   -webkit-app-region: drag;
 }
 
-/* 子分は一列に整列させず主人の足元を基準にそれぞれ独立に浮遊させる(renderer.jsがtransformで散らす)ので、
-   flexの並びではなく絶対配置の座標空間にする。overflow:visibleで浮遊時のはみ出しを許可する。 */
+/* 子分は一列に整列させず主人の足元を基準にそれぞれ独立に地面を跳ねさせる(renderer.jsがtransformで動かす)ので、
+   flexの並びではなく絶対配置の座標空間にする。overflow:visibleで跳ねる時のはみ出しを許可する。 */
 #pets {
   position: relative;
   width: 100%;
@@ -50,14 +50,16 @@ body {
 
 .pet.main {
   margin-left: -32px; /* 自身の幅の半分だけ左にずらして中央基準にする */
+  z-index: 5; /* 子分と重なっても常に主人を手前に表示する */
 }
 
 .pet.companion {
   width: 40px;
   height: 40px;
-  margin-left: -20px; /* 自身の幅の半分。実際の散らばりはrenderer.jsのtransformで加える */
+  margin-left: -20px; /* 自身の幅の半分。実際の跳ね回りはrenderer.jsのtransformで加える */
   border-radius: 8px;
   opacity: 0.92;
+  z-index: 1;
 }
 
 /* 足元の影。高く持ち上がるほど薄く小さくなる(renderer.jsが --shadow-* を更新) */
@@ -446,6 +448,171 @@ body.battling .pet.main {
   left: 0;
   width: 2px;
   height: 2px;
+}
+
+/* --- 落し物イベント(main.jsがたまに発生させ、loot-spawn/loot-clear で通知する) ---
+   コインまたは骨付き肉が足元に現れ、主人がひと口かじる。 */
+body.looting .pet.main {
+  animation: pet-nibble 0.4s ease-in-out 2;
+}
+
+@keyframes pet-nibble {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(2px) scale(1.04, 0.96);
+  }
+}
+
+.loot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  margin-left: 30px; /* 主人の少し右側に置く */
+  width: 18px;
+  height: 18px;
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+  pointer-events: none;
+  z-index: 2; /* 子分(z-index:1)が跳ねて重なっても隠れないようにする */
+}
+
+.loot.loot-enter {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.loot.loot-enter.coin,
+.loot.loot-enter.bone {
+  animation: loot-bob 1s ease-in-out infinite;
+}
+
+.loot.loot-cleared {
+  opacity: 0;
+  transform: scale(0.3) translateY(-10px);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+  animation: none;
+}
+
+@keyframes loot-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.loot.coin {
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff2ac, #f0c419 55%, #b8860b 100%);
+  border: 2px solid #8a6d1a;
+}
+
+.loot.bone {
+  width: 22px;
+  height: 12px;
+  margin-left: 28px;
+  bottom: 4px;
+  background: #f5ecd9;
+  border: 2px solid #b8a06a;
+  border-radius: 4px;
+}
+
+.loot.bone::before,
+.loot.bone::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background: #f5ecd9;
+  border: 2px solid #b8a06a;
+  border-radius: 50%;
+}
+
+.loot.bone::before {
+  left: -4px;
+}
+
+.loot.bone::after {
+  right: -4px;
+}
+
+/* --- 就寝(main.jsが長時間操作の無いことを検知し sleep-state で通知する) --- */
+body.sleeping .eye {
+  --eye-sy: 0.12;
+  --eye-sx: 1.1;
+}
+
+.zzz {
+  display: none;
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
+body.sleeping .pet.main .zzz {
+  display: block;
+}
+
+.zzz span {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  opacity: 0;
+  font:
+    bold 10px -apple-system,
+    'Segoe UI',
+    sans-serif;
+  color: #333333;
+  animation: zzz-rise 2.4s ease-in infinite;
+}
+
+.zzz span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.zzz span:nth-child(2) {
+  left: 8px;
+  top: 2px;
+  font-size: 12px;
+  animation-delay: 0.6s;
+}
+
+.zzz span:nth-child(3) {
+  left: 15px;
+  top: -4px;
+  font-size: 14px;
+  animation-delay: 1.2s;
+}
+
+@keyframes zzz-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  15% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
 }
 
 #speech-bubble {
