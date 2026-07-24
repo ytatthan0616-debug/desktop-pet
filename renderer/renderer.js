@@ -3,13 +3,14 @@ const bubbleEl = document.getElementById('speech-bubble');
 const expFillEl = document.getElementById('exp-fill');
 
 let hideBubbleTimer = null;
-let petRendered = false;
+let renderedCompanionCount = -1;
 
-// 子分は主人とは別ウィンドウ(companion.html)で表示・管理しているので、
-// このウィンドウには主人1体だけを描画すればよい。
-function createMainPetElement() {
+// 子分は主人と同じウィンドウの中に並べて表示する。歩く/走る/跳ぶ/転がる等の
+// アニメーションは共通のCSSクラス経由で全ての.petに掛かるので、主人と全く同じ
+// 動きをする(別ウィンドウにして個別のtransformを持たせると、この同期が崩れる)。
+function createPetElement(isCompanion) {
   const pet = document.createElement('div');
-  pet.className = 'pet main';
+  pet.className = isCompanion ? 'pet companion' : 'pet main';
 
   const sprite = document.createElement('div');
   sprite.className = 'pixel-sprite';
@@ -19,26 +20,34 @@ function createMainPetElement() {
   const right = document.createElement('div');
   right.className = 'eye right';
 
-  const accessory = document.createElement('div');
-  accessory.className = 'accessory';
-
-  const zzz = document.createElement('div');
-  zzz.className = 'zzz';
-  zzz.innerHTML = '<span>Z</span><span>Z</span><span>Z</span>';
-
   pet.appendChild(sprite);
   pet.appendChild(left);
   pet.appendChild(right);
-  pet.appendChild(accessory);
-  pet.appendChild(zzz);
+
+  // タスク固有アクション(ヘッドホン等)・就寝中のZZZは自分自身(メインのペット)にだけ表示する
+  if (!isCompanion) {
+    const accessory = document.createElement('div');
+    accessory.className = 'accessory';
+    pet.appendChild(accessory);
+
+    const zzz = document.createElement('div');
+    zzz.className = 'zzz';
+    zzz.innerHTML = '<span>Z</span><span>Z</span><span>Z</span>';
+    pet.appendChild(zzz);
+  }
 
   return pet;
 }
 
-function ensurePetRendered() {
-  if (petRendered) return;
-  petRendered = true;
-  petsEl.appendChild(createMainPetElement());
+function renderPets(companionCount) {
+  if (companionCount === renderedCompanionCount) return;
+  renderedCompanionCount = companionCount;
+
+  petsEl.innerHTML = '';
+  petsEl.appendChild(createPetElement(false));
+  for (let i = 0; i < companionCount; i++) {
+    petsEl.appendChild(createPetElement(true));
+  }
 }
 
 function showSpeech(text) {
@@ -52,7 +61,7 @@ function showSpeech(text) {
 }
 
 window.petAPI.onState((data) => {
-  ensurePetRendered();
+  renderPets(data.companions);
   const percent = Math.min(100, Math.round(data.ratio * 100));
   expFillEl.style.width = `${percent}%`;
   document.body.dataset.color = data.color || 'white';

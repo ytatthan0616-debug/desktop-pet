@@ -26,52 +26,33 @@ body {
   -webkit-app-region: drag;
 }
 
-/* 主人(index.html)・子分(companion.html)共通のペット表示スタイル。
-   left:50%を基準に絶対配置にしておき、overflow:visibleでヘッドホン等の
-   アクセサリーやZZZが頭上にはみ出しても隠れないようにする。 */
+/* 子分は主人と同じウィンドウの中に一列に並ぶ(ついてくる感じ)。
+   overflow:visibleはヘッドホン等のアクセサリーやZZZが頭上にはみ出しても
+   隠れないようにするため。 */
 #pets {
-  position: relative;
-  width: 100%;
-  height: 64px;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
   overflow: visible;
 }
 
 .pet {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
+  position: relative;
   width: 64px;
   height: 64px;
   background: #ffffff;
   border: 2px solid #333333;
   border-radius: 10px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
   transform-origin: bottom center;
 }
 
-.pet.main {
-  margin-left: -32px; /* 自身の幅の半分だけ左にずらして中央基準にする */
-}
-
-/* 子分は主人とは別ウィンドウ(companion.html)で表示する。ウィンドウ自体の位置は
-   main.jsが毎tick計算して動かし、この常時再生のホップだけをCSS側で受け持つ。 */
 .pet.companion {
   width: 40px;
   height: 40px;
-  margin-left: -20px; /* 自身の幅の半分 */
   border-radius: 8px;
   opacity: 0.92;
-  animation: companion-hop 0.55s ease-in-out infinite;
-}
-
-@keyframes companion-hop {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-9px);
-  }
 }
 
 /* 足元の影。高く持ち上がるほど薄く小さくなる(renderer.jsが --shadow-* を更新) */
@@ -245,10 +226,11 @@ body[data-expression='stressed'] .eye {
   }
 }
 
-/* 子分はswarmTick(renderer.js)が毎フレームtransformを書き換えて跳ね回らせているため、
-   walking/falling/landedの各アニメーションは主人(.pet.main)だけに適用する。
-   .petに直接掛けると子分のtransformが上書きされ、瞬間的に中央へ消えて見えてしまう。 */
-body.walking .pet.main {
+/* 子分は主人と同じウィンドウの中身なので、歩く/走る/跳ぶ/転がる/落ちる/着地の
+   アニメーションは.petに掛けて主人・子分とも全く同じ動きにする(別ウィンドウで
+   独自のtransformを持たせていた時期はここが.pet.main限定だったが、
+   「ジャンプしたら子分も一緒にジャンプする」感じに戻すため全員に適用する)。 */
+body.walking .pet {
   animation: pet-bob 0.35s ease-in-out infinite;
 }
 
@@ -265,13 +247,13 @@ body.walking .pet.main {
 /* --- 移動スタイル(main.jsがwander.modeに応じてdata-move-styleを切り替える) --- */
 
 /* 走る: 通常より速いピッチでボブする */
-body.walking[data-move-style='run'] .pet.main {
+body.walking[data-move-style='run'] .pet {
   animation: pet-bob 0.16s ease-in-out infinite;
 }
 
 /* ジャンプ: 主人のウィンドウ自体がmain.js側で弧を描いて上下するので、
    スプライト側は着地の瞬間だけ軽くスクワッシュ&ストレッチさせる */
-body.walking[data-move-style='jump'] .pet.main {
+body.walking[data-move-style='jump'] .pet {
   animation: pet-jump-squash 0.6s ease-in-out infinite;
 }
 
@@ -287,12 +269,12 @@ body.walking[data-move-style='jump'] .pet.main {
 
 /* 転がる: 進行方向にくるくる回転しながら移動する。
    他の状態は足元(bottom center)を軸にしているが、回転はそれだと下にはみ出すため中央を軸にする。 */
-body.walking[data-move-style='roll'] .pet.main {
+body.walking[data-move-style='roll'] .pet {
   animation: pet-roll 0.5s linear infinite;
   transform-origin: center;
 }
 
-body.walking.facing-left[data-move-style='roll'] .pet.main {
+body.walking.facing-left[data-move-style='roll'] .pet {
   animation-direction: reverse;
 }
 
@@ -306,13 +288,13 @@ body.walking.facing-left[data-move-style='roll'] .pet.main {
 }
 
 /* 落下中: わずかに縦に伸びるスクワッシュ&ストレッチ */
-body.falling .pet.main {
+body.falling .pet {
   transform: scaleY(1.12) scaleX(0.94);
   transition: transform 0.08s linear;
 }
 
 /* 着地の瞬間だけ再生されるバウンス */
-body.landed .pet.main {
+body.landed .pet {
   animation: pet-land 0.32s ease-out;
 }
 
@@ -444,10 +426,7 @@ body[data-action='timer'] .pet.main .accessory::after {
 
 /* --- 敵(ウイルス)出現イベント(main.jsがたまに発生させ、enemy-spawn/enemy-clear で通知する) ---
    戦闘中はペット全員が敵に向かって突撃するような揺れアニメーションになる。 */
-/* 子分はswarmTick(renderer.js)が毎フレームtransformを書き換えて散らばせているため、
-   ここでアニメーションさせると上書きされて中央に固まって見えなくなる。主人だけ突撃させ、
-   子分側の震えはrenderer.js側でtransformに合成する。 */
-body.battling .pet.main {
+body.battling .pet {
   animation: pet-attack 0.45s ease-in-out infinite;
 }
 
@@ -509,8 +488,8 @@ body.battling .pet.main {
 }
 
 /* --- 落し物イベント(main.jsがたまに発生させ、loot-spawn/loot-clear で通知する) ---
-   コインまたは骨付き肉が足元に現れ、主人がひと口かじる。 */
-body.looting .pet.main {
+   コインまたは骨付き肉が足元に現れ、ひと口かじる。 */
+body.looting .pet {
   animation: pet-nibble 0.4s ease-in-out 2;
 }
 

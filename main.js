@@ -12,14 +12,8 @@ const PET_SIZE = 64;
 const WINDOW_PADDING = 30; // セリフの吹き出し等がはみ出さないための余白
 const WINDOW_MARGIN_FROM_EDGE = 24;
 const ITEM_WINDOW_SIZE = 56; // 敵/コイン/骨を表示する別ウィンドウの一辺
-const COMPANION_SIZE = 40; // 子分の見た目のサイズ(幅・跳ねる前の高さ)
-const COMPANION_WINDOW_HEIGHT = 56; // 跳ねた時に見切れないよう縦だけ余裕を持たせたウィンドウの高さ
-const COMPANION_ROAM_RADIUS = 60; // 自分の持ち場からどれだけ左右に離れて漂うか
-const COMPANION_FOLLOW_DISTANCE = 220; // 主人からこれ以上離れたら置き去りにせず持ち場を移す
-const COMPANION_EASE = 0.1;
-const COMPANION_TICK_MS = 300; // 子分専用の更新間隔(主人のwanderTickより緩くして軽量化する)
-const COMPANION_PICK_MIN_MS = 900;
-const COMPANION_PICK_MAX_MS = 2400;
+const GAP = 14; // 主人と子分の間隔
+const COMPANION_SIZE = 40; // 子分の見た目のサイズ
 
 // --- 時間計測定数 ---
 const TICK_INTERVAL_MS = 5000; // メインループの間隔
@@ -57,7 +51,6 @@ const MOVING_LIKE_MODES = new Set(['walk', 'run', 'jump', 'roll', 'seek']);
 let mainWindow = null;
 let tickIntervalId = null;
 let wanderIntervalId = null;
-let companionIntervalId = null;
 let state = petState.loadState(STATE_FILE);
 let config = configStore.loadConfig();
 let lastActiveWindowKey = null;
@@ -73,7 +66,6 @@ let lootActive = false;
 let lastLootAt = 0;
 let isSleeping = false;
 let itemWindow = null; // 敵/コイン/骨を表示する別ウィンドウ
-let companions = []; // 子分ごとの { win, offsetX, targetOffsetX, nextPickAt, lastFacing }
 
 function getGroundY(display, winH) {
   const work = display.workArea;
@@ -106,16 +98,16 @@ const wander = {
   lastSentHeight: 0,
 };
 
-// 子分/敵/コイン/骨はいずれも別ウィンドウで表示するため、
-// メインウィンドウは主人1体分の固定サイズでよい。
-function computeWindowSize() {
-  const width = WINDOW_PADDING * 2 + PET_SIZE;
+// 子分は主人と同じウィンドウの中に横並びで表示するので、
+// 子分の数に応じてウィンドウの幅を広げる(敵/コイン/骨は別ウィンドウのまま)。
+function computeWindowSize(companionCount) {
+  const width = WINDOW_PADDING * 2 + PET_SIZE + (COMPANION_SIZE + GAP) * companionCount;
   const height = WINDOW_PADDING * 2 + PET_SIZE + 40; // 40 = 吹き出し用の余白
   return { width: Math.round(width), height: Math.round(height) };
 }
 
 function createWindow() {
-  const { width, height } = computeWindowSize();
+  const { width, height } = computeWindowSize(state.companions);
   const display = screen.getPrimaryDisplay();
   const { x: wx, y: wy, width: wW, height: wH } = display.workArea;
 
@@ -183,9 +175,7 @@ function createWindow() {
   // アクセスしてしまわないよう、破棄と同時にタイマーを止める。
   mainWindow.on('closed', () => {
     stopTimers();
-    stopCompanionTimer();
     closeItemWindow(false);
-    closeAllCompanionWindows();
     mainWindow = null;
   });
 }
@@ -208,123 +198,19 @@ function moveWindowTo(x, y, width, height) {
   mainWindow.setBounds({ x: lastCommandedBounds.x, y: lastCommandedBounds.y, width, height });
 }
 
-// 子分は主人とは別の小さな透明ウィンドウとして持たせる。ドラッグ中に集まったりは
-// せず、セリフも喋らず、敵/コイン/骨のイベントにも一切関与しない。ただし主人が
-// 遠くまで移動して置き去りになったら、持ち場だけ主人の近くへ移して追いつく。
-// 主人のwanderTick(50ms)より緩い専用タイマー(COMPANION_TICK_MS)で動かして軽量化している。
-// 主人の現在地の近く(左右にランダムなずれを持たせた位置)を子分の「持ち場」として返す。
-function pickCompanionHome() {
-  const [, winH] = mainWindow ? mainWindow.getSize() : [PET_SIZE, PET_SIZE];
-  const groundY = wander.y + winH - 24; // 主人の足元あたり
-  const display = screen.getDisplayNearestPoint({ x: Math.round(wander.x), y: Math.round(groundY) });
-  const { minX, maxX } = getXBounds(display, COMPANION_SIZE);
-  const homeX = Math.max(minX, Math.min(maxX, Math.round(wander.x + (Math.random() * 160 - 80))));
-  const homeY = Math.round(groundY) - (COMPANION_WINDOW_HEIGHT - COMPANION_SIZE);
-  return { homeX, homeY };
-}
-
-function createCompanionWindow() {
-  const { homeX, homeY } = pickCompanionHome();
-
-  const win = new BrowserWindow({
-    width: COMPANION_SIZE,
-    height: COMPANION_WINDOW_HEIGHT,
-    x: homeX,
-    y: homeY,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    resizable: false,
-    movable: false,
-    skipTaskbar: true,
-    hasShadow: false,
-    focusable: false,
-  });
-  win.setAlwaysOnTop(true, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  win.loadFile(path.join(__dirname, 'renderer', 'companion.html'), {
-    query: { color: state.color, skin: state.skin },
-  });
-  return { win, homeX, homeY, offsetX: 0, targetOffsetX: 0, nextPickAt: 0, lastFacing: null };
-}
-
-// state.companionsの数に合わせて子分ウィンドウを増減させる。
-function syncCompanionWindows() {
-  while (companions.length < state.companions) {
-    companions.push(createCompanionWindow());
-  }
-  while (companions.length > state.companions) {
-    const c = companions.pop();
-    if (!c.win.isDestroyed()) c.win.close();
-  }
-}
-
-function closeAllCompanionWindows() {
-  for (const c of companions) {
-    if (!c.win.isDestroyed()) c.win.close();
-  }
-  companions = [];
-}
-
-// 色/見た目を変えた時に、既存の子分ウィンドウにも反映する。
-function updateCompanionSkin() {
-  for (const c of companions) {
-    if (c.win.isDestroyed()) continue;
-    c.win.webContents
-      .executeJavaScript(
-        `document.body.dataset.color = ${JSON.stringify(state.color)}; document.body.dataset.skin = ${JSON.stringify(state.skin)};`
-      )
-      .catch(() => {});
-  }
-}
-
-// 基本は自分の持ち場(homeX)の左右をふらふら漂うだけの軽い処理だが、
-// 主人がCOMPANION_FOLLOW_DISTANCEより遠くまで行ってしまったら、置き去りにしないよう
-// 持ち場を主人の近くへ移し直す(ぴったり追従はせず、離れすぎた時だけ追いつく)。
-function companionsTick() {
-  if (!companions.length) return;
-  const now = Date.now();
-
-  for (const c of companions) {
-    if (c.win.isDestroyed()) continue;
-
-    const currentX = c.homeX + c.offsetX;
-    if (Math.abs(currentX - wander.x) > COMPANION_FOLLOW_DISTANCE) {
-      const home = pickCompanionHome();
-      c.homeX = home.homeX;
-      c.homeY = home.homeY;
-      c.offsetX = 0;
-      c.targetOffsetX = 0;
-      c.nextPickAt = now;
-    }
-
-    if (now >= c.nextPickAt) {
-      c.targetOffsetX = (Math.random() * 2 - 1) * COMPANION_ROAM_RADIUS;
-      c.nextPickAt = now + COMPANION_PICK_MIN_MS + Math.random() * (COMPANION_PICK_MAX_MS - COMPANION_PICK_MIN_MS);
-    }
-    const facing = c.targetOffsetX >= c.offsetX ? 'right' : 'left';
-    c.offsetX += (c.targetOffsetX - c.offsetX) * COMPANION_EASE;
-
-    const x = Math.round(c.homeX + c.offsetX);
-    c.win.setBounds({ x, y: c.homeY, width: COMPANION_SIZE, height: COMPANION_WINDOW_HEIGHT });
-
-    if (c.lastFacing !== facing) {
-      c.lastFacing = facing;
-      c.win.webContents
-        .executeJavaScript(`document.body.classList.toggle('facing-left', ${facing === 'left'});`)
-        .catch(() => {});
-    }
-  }
-}
-
-function startCompanionTimer() {
-  if (companionIntervalId) clearInterval(companionIntervalId);
-  companionIntervalId = setInterval(companionsTick, COMPANION_TICK_MS);
-}
-
-function stopCompanionTimer() {
-  if (companionIntervalId) clearInterval(companionIntervalId);
-  companionIntervalId = null;
+// 子分は主人と同じウィンドウに同居しているので、子分の数が変わったらウィンドウ幅を
+// 合わせ直す(見た目・動きは主人と共通のCSSがそのまま子分にも適用される)。
+function resizeWindowForLayout() {
+  if (!mainWindow) return;
+  const { width, height } = computeWindowSize(state.companions);
+  const [curX, curY] = mainWindow.getPosition();
+  const [curW, curH] = mainWindow.getSize();
+  // 右下を基準に、幅が増えた分だけ左に伸ばす
+  const newX = curX - (width - curW);
+  const newY = curY - (height - curH);
+  wander.x = newX;
+  wander.y = newY;
+  moveWindowTo(newX, newY, width, height);
 }
 
 // 敵(ウイルス)/コイン/骨を、ペットのウィンドウとは別の透明ウィンドウとして
@@ -855,7 +741,7 @@ function tick() {
     const { leveledUp, gainedCompanion } = petState.addActiveSeconds(state, TICK_SECONDS);
 
     if (gainedCompanion) {
-      syncCompanionWindows();
+      resizeWindowForLayout();
       sendSpeech(speech.speechForCompanion(state.companions));
     } else if (leveledUp) {
       sendSpeech(speech.speechForLevelUp(state.level));
@@ -887,7 +773,6 @@ function buildContextMenu() {
         click: () => {
           petState.setColor(state, c.key);
           petState.saveState(STATE_FILE, state);
-          updateCompanionSkin();
           sendState();
         },
       })),
@@ -901,7 +786,6 @@ function buildContextMenu() {
         click: () => {
           petState.setSkin(state, s.key);
           petState.saveState(STATE_FILE, state);
-          updateCompanionSkin();
           sendState();
         },
       })),
@@ -911,7 +795,7 @@ function buildContextMenu() {
       click: () => {
         state = petState.defaultState();
         petState.saveState(STATE_FILE, state);
-        syncCompanionWindows();
+        resizeWindowForLayout();
         sendState();
       },
     },
@@ -922,9 +806,7 @@ function buildContextMenu() {
 
 app.whenReady().then(() => {
   createWindow();
-  syncCompanionWindows();
   startTimers();
-  startCompanionTimer();
 
   configStore.watchConfig((newConfig) => {
     config = newConfig;
@@ -934,9 +816,7 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
-      syncCompanionWindows();
       startTimers();
-      startCompanionTimer();
     }
   });
 });
@@ -961,7 +841,7 @@ ipcMain.on('pet:quit', () => {
 ipcMain.on('pet:reset', () => {
   state = petState.defaultState();
   petState.saveState(STATE_FILE, state);
-  syncCompanionWindows();
+  resizeWindowForLayout();
   sendState();
 });
 
