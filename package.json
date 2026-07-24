@@ -1,6 +1,6 @@
 {
   "name": "desktop-pet",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "透明・常時最前面のデスクトップ常駐ペットアプリ",
   "main": "main.js",
   "author": "ytatthan0616-debug",
