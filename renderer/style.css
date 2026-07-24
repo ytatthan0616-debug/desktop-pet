@@ -534,6 +534,142 @@ body.battling .pet {
   left: 0;
   width: 2px;
   height: 2px;
+  /* 以前ここにあったbox-shadow(ドット絵本体)が別コミットの整理作業で
+     失われ、当たり判定用の2x2の空箱だけが残っていたため、ウイルスが
+     見えなくなっていた。以下で復元する。 */
+  box-shadow:
+    20px 2px 0 0 #e6d3ff,
+    8px 4px 0 0 #e6d3ff,
+    20px 4px 0 0 #7c4dcf,
+    30px 4px 0 0 #e6d3ff,
+    10px 8px 0 0 #7c4dcf,
+    16px 8px 0 0 #9b6fe0,
+    18px 8px 0 0 #9b6fe0,
+    20px 8px 0 0 #9b6fe0,
+    22px 8px 0 0 #9b6fe0,
+    28px 8px 0 0 #7c4dcf,
+    12px 10px 0 0 #9b6fe0,
+    14px 10px 0 0 #9b6fe0,
+    16px 10px 0 0 #9b6fe0,
+    18px 10px 0 0 #9b6fe0,
+    20px 10px 0 0 #9b6fe0,
+    22px 10px 0 0 #9b6fe0,
+    24px 10px 0 0 #7c4dcf,
+    26px 10px 0 0 #7c4dcf,
+    10px 12px 0 0 #9b6fe0,
+    12px 12px 0 0 #9b6fe0,
+    14px 12px 0 0 #9b6fe0,
+    16px 12px 0 0 #9b6fe0,
+    18px 12px 0 0 #9b6fe0,
+    20px 12px 0 0 #9b6fe0,
+    22px 12px 0 0 #7c4dcf,
+    24px 12px 0 0 #7c4dcf,
+    26px 12px 0 0 #7c4dcf,
+    28px 12px 0 0 #7c4dcf,
+    2px 14px 0 0 #e6d3ff,
+    4px 14px 0 0 #7c4dcf,
+    10px 14px 0 0 #9b6fe0,
+    12px 14px 0 0 #9b6fe0,
+    14px 14px 0 0 #9b6fe0,
+    16px 14px 0 0 #9b6fe0,
+    18px 14px 0 0 #9b6fe0,
+    20px 14px 0 0 #7c4dcf,
+    22px 14px 0 0 #7c4dcf,
+    24px 14px 0 0 #7c4dcf,
+    26px 14px 0 0 #7c4dcf,
+    28px 14px 0 0 #7c4dcf,
+    34px 14px 0 0 #7c4dcf,
+    36px 14px 0 0 #e6d3ff,
+    8px 16px 0 0 #9b6fe0,
+    10px 16px 0 0 #9b6fe0,
+    12px 16px 0 0 #9b6fe0,
+    14px 16px 0 0 #9b6fe0,
+    16px 16px 0 0 #9b6fe0,
+    18px 16px 0 0 #7c4dcf,
+    20px 16px 0 0 #7c4dcf,
+    22px 16px 0 0 #7c4dcf,
+    24px 16px 0 0 #7c4dcf,
+    26px 16px 0 0 #7c4dcf,
+    28px 16px 0 0 #7c4dcf,
+    30px 16px 0 0 #5b2f8a,
+    8px 18px 0 0 #9b6fe0,
+    10px 18px 0 0 #9b6fe0,
+    12px 18px 0 0 #9b6fe0,
+    14px 18px 0 0 #20102e,
+    16px 18px 0 0 #7c4dcf,
+    18px 18px 0 0 #7c4dcf,
+    20px 18px 0 0 #7c4dcf,
+    22px 18px 0 0 #7c4dcf,
+    24px 18px 0 0 #20102e,
+    26px 18px 0 0 #7c4dcf,
+    28px 18px 0 0 #5b2f8a,
+    30px 18px 0 0 #5b2f8a,
+    8px 20px 0 0 #9b6fe0,
+    10px 20px 0 0 #9b6fe0,
+    12px 20px 0 0 #9b6fe0,
+    14px 20px 0 0 #20102e,
+    16px 20px 0 0 #7c4dcf,
+    18px 20px 0 0 #7c4dcf,
+    20px 20px 0 0 #7c4dcf,
+    22px 20px 0 0 #7c4dcf,
+    24px 20px 0 0 #20102e,
+    26px 20px 0 0 #5b2f8a,
+    28px 20px 0 0 #5b2f8a,
+    30px 20px 0 0 #5b2f8a,
+    8px 22px 0 0 #9b6fe0,
+    10px 22px 0 0 #9b6fe0,
+    12px 22px 0 0 #7c4dcf,
+    14px 22px 0 0 #7c4dcf,
+    16px 22px 0 0 #7c4dcf,
+    18px 22px 0 0 #7c4dcf,
+    20px 22px 0 0 #7c4dcf,
+    22px 22px 0 0 #7c4dcf,
+    24px 22px 0 0 #5b2f8a,
+    26px 22px 0 0 #5b2f8a,
+    28px 22px 0 0 #5b2f8a,
+    30px 22px 0 0 #5b2f8a,
+    2px 24px 0 0 #e6d3ff,
+    4px 24px 0 0 #7c4dcf,
+    10px 24px 0 0 #7c4dcf,
+    12px 24px 0 0 #7c4dcf,
+    14px 24px 0 0 #7c4dcf,
+    16px 24px 0 0 #7c4dcf,
+    18px 24px 0 0 #7c4dcf,
+    20px 24px 0 0 #7c4dcf,
+    22px 24px 0 0 #5b2f8a,
+    24px 24px 0 0 #5b2f8a,
+    26px 24px 0 0 #5b2f8a,
+    28px 24px 0 0 #5b2f8a,
+    34px 24px 0 0 #7c4dcf,
+    36px 24px 0 0 #e6d3ff,
+    10px 26px 0 0 #7c4dcf,
+    12px 26px 0 0 #7c4dcf,
+    14px 26px 0 0 #7c4dcf,
+    16px 26px 0 0 #20102e,
+    18px 26px 0 0 #20102e,
+    20px 26px 0 0 #20102e,
+    22px 26px 0 0 #20102e,
+    24px 26px 0 0 #5b2f8a,
+    26px 26px 0 0 #5b2f8a,
+    28px 26px 0 0 #5b2f8a,
+    12px 28px 0 0 #7c4dcf,
+    14px 28px 0 0 #7c4dcf,
+    16px 28px 0 0 #7c4dcf,
+    18px 28px 0 0 #5b2f8a,
+    20px 28px 0 0 #5b2f8a,
+    22px 28px 0 0 #5b2f8a,
+    24px 28px 0 0 #5b2f8a,
+    26px 28px 0 0 #5b2f8a,
+    10px 30px 0 0 #7c4dcf,
+    16px 30px 0 0 #5b2f8a,
+    18px 30px 0 0 #5b2f8a,
+    20px 30px 0 0 #5b2f8a,
+    22px 30px 0 0 #5b2f8a,
+    28px 30px 0 0 #7c4dcf,
+    8px 34px 0 0 #e6d3ff,
+    20px 34px 0 0 #7c4dcf,
+    30px 34px 0 0 #e6d3ff,
+    20px 38px 0 0 #e6d3ff;
 }
 
 /* --- 落し物イベント(main.jsがたまに発生させ、loot-spawn/loot-clear で通知する) ---
@@ -599,32 +735,55 @@ body.looting .pet {
   border: 2px solid #8a6d1a;
 }
 
+/* 骨付き肉。以前は骨(ダンベル型)だけが目立ち肉に見えづらかったため、
+   照り焼き色のグラデーション+焼き目の斜線でお肉の塊を表現し、骨は
+   先端に小さく覗かせる程度に留める。 */
 .loot.bone {
-  width: 22px;
-  height: 12px;
-  background: #f5ecd9;
-  border: 2px solid #b8a06a;
-  border-radius: 4px;
-}
-
-.loot.bone::before,
-.loot.bone::after {
-  content: '';
-  position: absolute;
-  top: -3px;
-  width: 8px;
-  height: 8px;
-  background: #f5ecd9;
-  border: 2px solid #b8a06a;
-  border-radius: 50%;
+  width: 20px;
+  height: 18px;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 32%),
+    linear-gradient(
+      135deg,
+      transparent 38%,
+      rgba(84, 38, 10, 0.35) 41%,
+      transparent 44%,
+      transparent 54%,
+      rgba(84, 38, 10, 0.3) 57%,
+      transparent 60%
+    ),
+    radial-gradient(circle at 42% 38%, #f0b878 0%, #c9702f 55%, #8a4a1f 100%);
+  border: 2px solid #6b3616;
+  border-radius: 55% 55% 60% 60% / 65% 65% 50% 50%;
+  position: relative;
 }
 
 .loot.bone::before {
-  left: -4px;
+  /* 骨の柄 */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 6px;
+  height: 9px;
+  background: #f5ecd9;
+  border: 2px solid #b8a06a;
+  border-radius: 2px;
+  transform: translateX(-50%);
 }
 
 .loot.bone::after {
-  right: -4px;
+  /* 骨の先端の丸み */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  width: 11px;
+  height: 7px;
+  background: #f5ecd9;
+  border: 2px solid #b8a06a;
+  border-radius: 50%;
+  transform: translateX(-50%);
 }
 
 /* --- 就寝(main.jsが長時間操作の無いことを検知し sleep-state で通知する) --- */
