@@ -1213,12 +1213,14 @@ body[data-skin='girl'] .pixel-sprite {
 
 body[data-skin='yougai'] .pixel-sprite {
   box-shadow:
-    4px 0px 0 1px #2f2a26,
-    12px 0px 0 1px #2f2a26,
-    20px 0px 0 1px #2f2a26,
-    40px 0px 0 1px #2f2a26,
-    48px 0px 0 1px #2f2a26,
-    56px 0px 0 1px #2f2a26,
+    8px 0px 0 1px #2f2a26,
+    16px 0px 0 1px #2f2a26,
+    24px 0px 0 1px #2f2a26,
+    28px 0px 0 1px #2f2a26,
+    32px 0px 0 1px #2f2a26,
+    36px 0px 0 1px #2f2a26,
+    44px 0px 0 1px #2f2a26,
+    52px 0px 0 1px #2f2a26,
     0px 4px 0 1px #2f2a26,
     4px 4px 0 1px #2f2a26,
     8px 4px 0 1px #2f2a26,
@@ -1226,6 +1228,8 @@ body[data-skin='yougai'] .pixel-sprite {
     16px 4px 0 1px #2f2a26,
     20px 4px 0 1px #2f2a26,
     24px 4px 0 1px #2f2a26,
+    28px 4px 0 1px #2f2a26,
+    32px 4px 0 1px #2f2a26,
     36px 4px 0 1px #2f2a26,
     40px 4px 0 1px #2f2a26,
     44px 4px 0 1px #2f2a26,
@@ -1394,7 +1398,7 @@ body[data-skin='yougai'] .pixel-sprite {
     44px 60px 0 1px #f0c8a0,
     48px 60px 0 1px #f0c8a0;
 }
-
+    44px 60px 0 1px #f0c8a0,
 body[data-skin='fish'] .pixel-sprite {
   box-shadow:
     12px 0px 0 1px #ff9640,
