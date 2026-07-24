@@ -26,8 +26,9 @@ body {
   -webkit-app-region: drag;
 }
 
-/* 子分は一列に整列させず主人の足元を基準にそれぞれ独立に地面を跳ねさせる(renderer.jsがtransformで動かす)ので、
-   flexの並びではなく絶対配置の座標空間にする。overflow:visibleで跳ねる時のはみ出しを許可する。 */
+/* 主人(index.html)・子分(companion.html)共通のペット表示スタイル。
+   left:50%を基準に絶対配置にしておき、overflow:visibleでヘッドホン等の
+   アクセサリーやZZZが頭上にはみ出しても隠れないようにする。 */
 #pets {
   position: relative;
   width: 100%;
@@ -50,16 +51,27 @@ body {
 
 .pet.main {
   margin-left: -32px; /* 自身の幅の半分だけ左にずらして中央基準にする */
-  z-index: 5; /* 子分と重なっても常に主人を手前に表示する */
 }
 
+/* 子分は主人とは別ウィンドウ(companion.html)で表示する。ウィンドウ自体の位置は
+   main.jsが毎tick計算して動かし、この常時再生のホップだけをCSS側で受け持つ。 */
 .pet.companion {
   width: 40px;
   height: 40px;
-  margin-left: -20px; /* 自身の幅の半分。実際の跳ね回りはrenderer.jsのtransformで加える */
+  margin-left: -20px; /* 自身の幅の半分 */
   border-radius: 8px;
   opacity: 0.92;
-  z-index: 1;
+  animation: companion-hop 0.55s ease-in-out infinite;
+}
+
+@keyframes companion-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
 }
 
 /* 足元の影。高く持ち上がるほど薄く小さくなる(renderer.jsが --shadow-* を更新) */
